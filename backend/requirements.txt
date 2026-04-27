@@ -1,0 +1,4 @@
+akshare
+pandas
+azure-data-tables
+azure-functions
