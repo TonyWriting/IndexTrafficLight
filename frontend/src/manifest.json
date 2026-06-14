@@ -1,7 +1,7 @@
 {
-    "name" : "QDII ETF 溢价灯",
-    "appid" : "",
-    "description" : "QDII ETF premium monitor",
+    "name" : "",
+    "appid" : "wxe541267a7af249ff",
+    "description" : "",
     "versionName" : "1.0.0",
     "versionCode" : "100",
     "transformPx" : false,
@@ -50,7 +50,7 @@
     "quickapp" : {},
     /* 小程序特有相关 */
     "mp-weixin" : {
-        "appid" : "",
+        "appid" : "wxe541267a7af249ff",
         "setting" : {
             "urlCheck" : false
         },

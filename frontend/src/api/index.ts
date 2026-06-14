@@ -6,8 +6,9 @@ import mockPremiumHistory from '../mock/premium-history.json'
 const BASE_URL = import.meta.env.VITE_API_BASE_URL || ''
 const MOCK_MODE = import.meta.env.VITE_USE_MOCK
 const USE_MOCK = MOCK_MODE === 'true' || (MOCK_MODE !== 'false' && !BASE_URL)
+const DISABLE_CACHE = import.meta.env.VITE_DISABLE_CACHE === 'true'
 
-const CACHE_VERSION = 'v3'
+const CACHE_VERSION = 'v5'
 const CACHE_KEY_ETFS = `cache_etfs_${CACHE_VERSION}`
 const CACHE_KEY_HISTORY = `cache_etf_premium_history_${CACHE_VERSION}_`
 const CACHE_KEY_ETFS_PREFIX = 'cache_etfs'
@@ -119,14 +120,14 @@ export async function fetchEtfs(forceRefresh = false): Promise<EtfInfo[]> {
   if (USE_MOCK) return mockEtfs as EtfInfo[]
   clearLegacyCacheOnce()
 
-  if (!forceRefresh) {
+  if (!forceRefresh && !DISABLE_CACHE) {
     const cached = getCache<EtfInfo[]>(CACHE_KEY_ETFS)
     if (cached) return cached
   }
 
   return singleFlight('etfs', async () => {
     const data = await request<EtfInfo[]>('/api/etfs')
-    setCache(CACHE_KEY_ETFS, data)
+    if (!DISABLE_CACHE) setCache(CACHE_KEY_ETFS, data)
     return data
   }).catch(() => {
     throw new Error('ETF 列表加载失败')
@@ -142,14 +143,14 @@ export async function fetchPremiumHistory(
 
   const cacheKey = CACHE_KEY_HISTORY + code
 
-  if (!forceRefresh) {
+  if (!forceRefresh && !DISABLE_CACHE) {
     const cached = getCache<EtfPremiumHistory>(cacheKey)
     if (cached) return cached
   }
 
   return singleFlight(`history:${code}`, async () => {
     const data = await request<EtfPremiumHistory>(`/api/etfs/history?code=${encodeURIComponent(code)}`)
-    setCache(cacheKey, data)
+    if (!DISABLE_CACHE) setCache(cacheKey, data)
     return data
   }).catch(() => {
     throw new Error(`${code} 溢价历史加载失败`)

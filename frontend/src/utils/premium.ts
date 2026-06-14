@@ -1,7 +1,7 @@
 import type { PremiumRange, PremiumRecord, PremiumStats } from '../types'
 import { PremiumStatus } from '../types'
 
-const RANGE_YEARS: Record<Exclude<PremiumRange, 'all'>, number> = {
+const RANGE_YEARS: Record<PremiumRange, number> = {
   '1y': 1,
   '3y': 3,
 }
@@ -42,7 +42,7 @@ export function filterByRange(
   range: PremiumRange,
 ): PremiumRecord[] {
   const sorted = normalizeRecords(records)
-  if (range === 'all' || sorted.length === 0) return sorted
+  if (sorted.length === 0) return sorted
 
   const latestDate = sorted[sorted.length - 1].date
   const cutoff = shiftYear(latestDate, -RANGE_YEARS[range])
@@ -142,4 +142,11 @@ export function formatPercentile(value: number | null | undefined): string {
 export function formatPrice(value: number | null | undefined, digits = 3): string {
   if (!isFiniteNumber(value)) return '--'
   return value.toFixed(digits)
+}
+
+export function formatShortDate(value: string | null | undefined): string {
+  if (!value) return '--'
+  const match = /^\d{4}-(\d{2})-(\d{2})$/.exec(value)
+  if (!match) return value
+  return `${parseInt(match[1], 10)}月${parseInt(match[2], 10)}日`
 }

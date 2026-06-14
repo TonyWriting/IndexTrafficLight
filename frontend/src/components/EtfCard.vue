@@ -1,16 +1,15 @@
 <template>
   <view
     class="etf-card"
-    :style="{ borderColor: statusConfig.borderColor }"
     @click="onClick"
   >
     <view class="card-top">
       <view class="title-block">
-        <text class="fund-name">{{ name }}</text>
-        <text class="fund-code">{{ code }}</text>
+        <text class="fund-name" selectable>{{ name }}</text>
+        <text class="fund-code" selectable>{{ codeLine }}</text>
       </view>
       <view class="status-badge" :style="{ backgroundColor: statusConfig.bgColor }">
-        <text class="status-text" :style="{ color: statusConfig.color }">
+        <text class="status-text" :style="{ color: statusConfig.color }" selectable>
           {{ statusConfig.label }}
         </text>
       </view>
@@ -19,30 +18,14 @@
     <view class="primary-row">
       <view class="premium-block">
         <text class="metric-label">当前溢价</text>
-        <text class="premium-value" :style="{ color: statusConfig.color }">
+        <text class="premium-value" :style="{ color: statusConfig.color }" selectable>
           {{ formatPremiumRate(latest?.premium_rate) }}
         </text>
       </view>
       <view class="rank-block">
-        <text class="rank-value">{{ formatPercentile(percentile) }}</text>
+        <text class="rank-value" selectable>P{{ percentileLabel }}</text>
         <text class="metric-label">历史分位</text>
       </view>
-    </view>
-
-    <view class="facts-row">
-      <view class="fact-item">
-        <text class="fact-label">平均溢价</text>
-        <text class="fact-value">{{ formatPremiumRate(mean) }}</text>
-      </view>
-      <view class="fact-item">
-        <text class="fact-label">中位数</text>
-        <text class="fact-value">{{ formatPremiumRate(median) }}</text>
-      </view>
-    </view>
-
-    <view class="card-bottom">
-      <text class="date-text">{{ latest?.date || '--' }}</text>
-      <text class="open-text">查看详情 ></text>
     </view>
   </view>
 </template>
@@ -51,7 +34,7 @@
 import { computed } from 'vue'
 import type { PremiumRecord, PremiumStatus } from '../types'
 import { PREMIUM_STATUS_CONFIG } from '../types'
-import { formatPercentile, formatPremiumRate } from '../utils/premium'
+import { formatPremiumRate, formatShortDate } from '../utils/premium'
 
 const props = defineProps<{
   code: string
@@ -59,8 +42,6 @@ const props = defineProps<{
   latest: PremiumRecord | null
   percentile: number
   status: PremiumStatus
-  mean: number | null
-  median: number | null
 }>()
 
 const emit = defineEmits<{
@@ -68,6 +49,16 @@ const emit = defineEmits<{
 }>()
 
 const statusConfig = computed(() => PREMIUM_STATUS_CONFIG[props.status])
+
+const codeLine = computed(() => {
+  const date = props.latest?.date
+  return date ? `${props.code} · ${formatShortDate(date)}` : props.code
+})
+
+const percentileLabel = computed(() => {
+  if (!Number.isFinite(props.percentile)) return '--'
+  return Math.round(props.percentile * 100).toString()
+})
 
 function onClick() {
   emit('click', props.code)
@@ -77,7 +68,7 @@ function onClick() {
 <style scoped>
 .etf-card {
   background: #ffffff;
-  border: 2rpx solid;
+  border: 2rpx solid #e2e8f0;
   border-radius: 16rpx;
   padding: 28rpx;
   margin-bottom: 20rpx;
@@ -137,8 +128,7 @@ function onClick() {
   min-width: 0;
 }
 
-.metric-label,
-.fact-label {
+.metric-label {
   display: block;
   color: #64748b;
   font-size: 22rpx;
@@ -163,48 +153,5 @@ function onClick() {
   font-size: 34rpx;
   font-weight: 700;
   line-height: 44rpx;
-}
-
-.facts-row {
-  display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: 16rpx;
-  margin-top: 24rpx;
-}
-
-.fact-item {
-  min-width: 0;
-  background: #f8fafc;
-  border-radius: 12rpx;
-  padding: 14rpx 16rpx;
-}
-
-.fact-value {
-  display: block;
-  margin-top: 2rpx;
-  color: #0f172a;
-  font-size: 26rpx;
-  font-weight: 700;
-  line-height: 34rpx;
-}
-
-.card-bottom {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 18rpx;
-  margin-top: 20rpx;
-}
-
-.date-text,
-.open-text {
-  color: #64748b;
-  font-size: 22rpx;
-  line-height: 30rpx;
-}
-
-.open-text {
-  color: #2563eb;
-  font-weight: 600;
 }
 </style>

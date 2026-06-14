@@ -1,15 +1,5 @@
 <template>
   <view class="dashboard">
-    <view class="topbar">
-      <view class="title-block">
-        <text class="page-title">QDII ETF 溢价灯</text>
-        <text class="page-subtitle">盘后数据 · {{ latestDateText }}</text>
-      </view>
-      <view class="refresh-btn" @click="loadData(true)">
-        <text>刷新</text>
-      </view>
-    </view>
-
     <view class="range-tabs">
       <view
         v-for="option in RANGE_OPTIONS"
@@ -33,23 +23,48 @@
       </view>
     </view>
 
-    <view v-else-if="dashboardItems.length === 0" class="state-panel">
+    <view v-else-if="dashboardGroups.length === 0" class="state-panel">
       <text>暂无数据</text>
     </view>
 
     <view v-else class="card-list">
-      <EtfCard
-        v-for="item in dashboardItems"
-        :key="item.info.code"
-        :code="item.info.code"
-        :name="item.displayName"
-        :latest="item.stats.latest"
-        :percentile="item.stats.percentile"
-        :status="item.stats.status"
-        :mean="item.stats.mean"
-        :median="item.stats.median"
-        @click="openDetail"
-      />
+      <view
+        v-for="group in dashboardGroups"
+        :key="group.tracking_index"
+        class="group-frame"
+      >
+        <EtfGroupHeader
+          :tracking-index-name="group.tracking_index_name"
+          :member-count="group.members.length"
+          :min-premium="group.min_premium"
+          :max-premium="group.max_premium"
+        />
+        <view class="group-body">
+          <view v-if="group.members.length >= 2" class="tile-grid">
+            <EtfMiniTile
+              v-for="item in group.members"
+              :key="item.info.code"
+              :code="item.info.code"
+              :name="item.info.short_name || item.info.name || item.info.code"
+              :latest="item.stats.latest"
+              :percentile="item.stats.percentile"
+              :status="item.stats.status"
+              @click="openDetail"
+            />
+          </view>
+          <EtfCard
+            v-for="item in group.members"
+            v-else
+            :key="item.info.code"
+            :code="item.info.code"
+            :name="item.displayName"
+            :latest="item.stats.latest"
+            :percentile="item.stats.percentile"
+            :status="item.stats.status"
+            @click="openDetail"
+          />
+        </view>
+      </view>
     </view>
   </view>
 </template>
@@ -58,18 +73,37 @@
 import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { onPullDownRefresh } from '@dcloudio/uni-app'
 import EtfCard from '../../components/EtfCard.vue'
+import EtfGroupHeader from '../../components/EtfGroupHeader.vue'
+import EtfMiniTile from '../../components/EtfMiniTile.vue'
 import { fetchEtfs, fetchPremiumHistory, PREMIUM_CACHE_UPDATED_EVENT } from '../../api'
-import type { EtfInfo, EtfPremiumHistory, PremiumRange } from '../../types'
+import type { EtfInfo, EtfPremiumHistory, PremiumRange, PremiumStats } from '../../types'
 import { RANGE_OPTIONS } from '../../types'
 import { summarizePremium } from '../../utils/premium'
+
+interface DashboardItem {
+  info: EtfInfo
+  displayName: string
+  stats: PremiumStats
+}
+
+interface DashboardGroup {
+  tracking_index: string
+  tracking_index_name: string
+  members: DashboardItem[]
+  min_premium: number | null
+  max_premium: number | null
+}
+
+const FALLBACK_INDEX_KEY = '__UNGROUPED__'
+const FALLBACK_INDEX_NAME = '未分类'
 
 const loading = ref(true)
 const error = ref('')
 const etfs = ref<EtfInfo[]>([])
 const histories = ref<Record<string, EtfPremiumHistory>>({})
-const selectedRange = ref<PremiumRange>('all')
+const selectedRange = ref<PremiumRange>('1y')
 
-const dashboardItems = computed(() => (
+const dashboardItems = computed<DashboardItem[]>(() => (
   etfs.value
     .map((info) => {
       const history = histories.value[info.code]
@@ -83,12 +117,47 @@ const dashboardItems = computed(() => (
     .filter((item) => item.stats.latest)
 ))
 
-const latestDateText = computed(() => {
-  const dates = dashboardItems.value
-    .map((item) => item.stats.latest?.date || '')
-    .filter(Boolean)
-    .sort()
-  return dates[dates.length - 1] || '--'
+const dashboardGroups = computed<DashboardGroup[]>(() => {
+  const order: string[] = []
+  const groups = new Map<string, DashboardGroup>()
+
+  for (const item of dashboardItems.value) {
+    const key = item.info.tracking_index || FALLBACK_INDEX_KEY
+    const name = item.info.tracking_index_name || FALLBACK_INDEX_NAME
+
+    let group = groups.get(key)
+    if (!group) {
+      group = {
+        tracking_index: key,
+        tracking_index_name: name,
+        members: [],
+        min_premium: null,
+        max_premium: null,
+      }
+      groups.set(key, group)
+      order.push(key)
+    }
+    group.members.push(item)
+  }
+
+  for (const group of groups.values()) {
+    group.members.sort((a, b) => {
+      const pa = a.stats.latest?.premium_rate ?? Number.POSITIVE_INFINITY
+      const pb = b.stats.latest?.premium_rate ?? Number.POSITIVE_INFINITY
+      return pa - pb
+    })
+
+    const rates = group.members
+      .map((member) => member.stats.latest?.premium_rate)
+      .filter((value): value is number => typeof value === 'number' && Number.isFinite(value))
+
+    if (rates.length > 0) {
+      group.min_premium = Math.min(...rates)
+      group.max_premium = Math.max(...rates)
+    }
+  }
+
+  return order.map((key) => groups.get(key)!).filter(Boolean)
 })
 
 async function loadData(forceRefresh = false, silent = false) {
@@ -149,52 +218,11 @@ onPullDownRefresh(async () => {
   background: #f1f5f9;
 }
 
-.topbar {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 24rpx;
-}
-
-.title-block {
-  min-width: 0;
-}
-
-.page-title {
-  display: block;
-  color: #0f172a;
-  font-size: 40rpx;
-  font-weight: 800;
-  line-height: 50rpx;
-}
-
-.page-subtitle {
-  display: block;
-  margin-top: 6rpx;
-  color: #64748b;
-  font-size: 22rpx;
-  line-height: 30rpx;
-}
-
-.refresh-btn {
-  flex-shrink: 0;
-  padding: 12rpx 22rpx;
-  background: #0f172a;
-  border-radius: 10rpx;
-}
-
-.refresh-btn text {
-  color: #ffffff;
-  font-size: 24rpx;
-  font-weight: 700;
-  line-height: 30rpx;
-}
-
 .range-tabs {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(2, 1fr);
   gap: 8rpx;
-  margin: 28rpx 0 22rpx;
+  margin: 0 0 22rpx;
   padding: 6rpx;
   background: #e2e8f0;
   border-radius: 14rpx;
@@ -252,5 +280,29 @@ onPullDownRefresh(async () => {
 
 .card-list {
   margin-top: 4rpx;
+}
+
+.group-frame {
+  margin-bottom: 24rpx;
+  background: #ffffff;
+  border: 2rpx solid #cbd5e1;
+  border-radius: 18rpx;
+  overflow: hidden;
+  box-shadow: 0 4rpx 14rpx rgba(15, 23, 42, 0.05);
+}
+
+.group-body {
+  padding: 18rpx;
+}
+
+.tile-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 12rpx;
+}
+
+.group-body :deep(.etf-card) {
+  margin-bottom: 0;
+  box-shadow: none;
 }
 </style>

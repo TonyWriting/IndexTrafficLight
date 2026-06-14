@@ -19,11 +19,11 @@
       <view class="summary-panel" :style="{ borderColor: statusConfig.borderColor }">
         <view class="summary-head">
           <view class="title-block">
-            <text class="fund-name">{{ displayName }}</text>
-            <text class="fund-code">{{ code }}</text>
+            <text class="fund-name" selectable>{{ displayName }}</text>
+            <text class="fund-code" selectable>{{ code }}</text>
           </view>
           <view class="status-badge" :style="{ backgroundColor: statusConfig.bgColor }">
-            <text class="status-text" :style="{ color: statusConfig.color }">
+            <text class="status-text" :style="{ color: statusConfig.color }" selectable>
               {{ statusConfig.label }}
             </text>
           </view>
@@ -32,12 +32,12 @@
         <view class="summary-main">
           <view>
             <text class="metric-label">当前溢价</text>
-            <text class="premium-value" :style="{ color: statusConfig.color }">
+            <text class="premium-value" :style="{ color: statusConfig.color }" selectable>
               {{ formatPremiumRate(stats.latest.premium_rate) }}
             </text>
           </view>
           <view class="rank-box">
-            <text class="rank-value">{{ formatPercentile(stats.percentile) }}</text>
+            <text class="rank-value" selectable>P{{ percentileLabel }}</text>
             <text class="metric-label">历史分位</text>
           </view>
         </view>
@@ -45,15 +45,15 @@
         <view class="quote-row">
           <view class="quote-item">
             <text class="quote-label">收盘价</text>
-            <text class="quote-value">{{ formatPrice(stats.latest.close) }}</text>
+            <text class="quote-value" selectable>{{ formatPrice(stats.latest.close) }}</text>
           </view>
           <view class="quote-item">
             <text class="quote-label">基金净值</text>
-            <text class="quote-value">{{ formatPrice(stats.latest.nav) }}</text>
+            <text class="quote-value" selectable>{{ formatPrice(stats.latest.nav) }}</text>
           </view>
           <view class="quote-item">
             <text class="quote-label">日期</text>
-            <text class="quote-value">{{ stats.latest.date }}</text>
+            <text class="quote-value" selectable>{{ formatShortDate(stats.latest.date) }}</text>
           </view>
         </view>
       </view>
@@ -73,7 +73,7 @@
       <view class="stats-grid">
         <view v-for="item in statCards" :key="item.label" class="stat-cell">
           <text class="stat-label">{{ item.label }}</text>
-          <text class="stat-value">{{ item.value }}</text>
+          <text class="stat-value" selectable>{{ item.value }}</text>
         </view>
       </view>
 
@@ -98,10 +98,10 @@
         </view>
 
         <view v-for="record in recentRows" :key="record.date" class="table-row">
-          <text class="col date">{{ record.date.slice(5) }}</text>
-          <text class="col">{{ formatPrice(record.close) }}</text>
-          <text class="col">{{ formatPrice(record.nav) }}</text>
-          <text class="col premium">{{ formatPremiumRate(record.premium_rate) }}</text>
+          <text class="col date" selectable>{{ formatShortDate(record.date) }}</text>
+          <text class="col" selectable>{{ formatPrice(record.close) }}</text>
+          <text class="col" selectable>{{ formatPrice(record.nav) }}</text>
+          <text class="col premium" selectable>{{ formatPremiumRate(record.premium_rate) }}</text>
         </view>
       </view>
     </view>
@@ -117,9 +117,9 @@ import type { EtfPremiumHistory, PremiumRange } from '../../types'
 import { PREMIUM_STATUS_CONFIG, RANGE_OPTIONS } from '../../types'
 import {
   filterByRange,
-  formatPercentile,
   formatPremiumRate,
   formatPrice,
+  formatShortDate,
   summarizePremium,
 } from '../../utils/premium'
 
@@ -127,11 +127,17 @@ const code = ref('159509')
 const loading = ref(true)
 const error = ref('')
 const history = ref<EtfPremiumHistory | null>(null)
-const selectedRange = ref<PremiumRange>('all')
+const selectedRange = ref<PremiumRange>('1y')
 
 const stats = computed(() => summarizePremium(history.value?.data || [], selectedRange.value))
 const statusConfig = computed(() => PREMIUM_STATUS_CONFIG[stats.value.status])
 const displayName = computed(() => history.value?.short_name || history.value?.name || code.value)
+
+const percentileLabel = computed(() => {
+  const value = stats.value.percentile
+  if (!Number.isFinite(value)) return '--'
+  return Math.round(value * 100).toString()
+})
 
 const statCards = computed(() => [
   { label: '平均溢价', value: formatPremiumRate(stats.value.mean) },
@@ -335,7 +341,7 @@ onUnmounted(() => {
 
 .range-tabs {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(2, 1fr);
   gap: 8rpx;
   margin: 22rpx 0;
   padding: 6rpx;

@@ -45,6 +45,8 @@ def _etf_summary(config: EtfConfig) -> dict:
         "code": config.code,
         "name": config.name,
         "short_name": config.short_name,
+        "tracking_index": config.tracking_index,
+        "tracking_index_name": config.tracking_index_name,
         "latest": get_latest_premium(config.code),
     }
 

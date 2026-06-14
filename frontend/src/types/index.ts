@@ -9,6 +9,8 @@ export interface EtfInfo {
   code: string
   name: string
   short_name: string
+  tracking_index: string
+  tracking_index_name: string
   latest: PremiumRecord | null
 }
 
@@ -20,7 +22,7 @@ export interface EtfPremiumHistory {
   data: PremiumRecord[]
 }
 
-export type PremiumRange = '1y' | '3y' | 'all'
+export type PremiumRange = '1y' | '3y'
 
 export interface RangeOption {
   value: PremiumRange
@@ -30,7 +32,6 @@ export interface RangeOption {
 export const RANGE_OPTIONS: RangeOption[] = [
   { value: '1y', label: '近1年' },
   { value: '3y', label: '近3年' },
-  { value: 'all', label: '全部' },
 ]
 
 export enum PremiumStatus {
@@ -50,31 +51,31 @@ export interface PremiumStatusConfig {
 
 export const PREMIUM_STATUS_CONFIG: Record<PremiumStatus, PremiumStatusConfig> = {
   [PremiumStatus.LOW]: {
-    label: '低溢价/折价',
+    label: '极低',
     color: '#047857',
     bgColor: '#ecfdf5',
     borderColor: '#10b981',
   },
   [PremiumStatus.BELOW_NORMAL]: {
-    label: '偏低溢价',
+    label: '偏低',
     color: '#15803d',
     bgColor: '#f0fdf4',
     borderColor: '#22c55e',
   },
   [PremiumStatus.NORMAL]: {
-    label: '常态区间',
+    label: '常态',
     color: '#92400e',
     bgColor: '#fffbeb',
     borderColor: '#f59e0b',
   },
   [PremiumStatus.ABOVE_NORMAL]: {
-    label: '偏高溢价',
+    label: '偏高',
     color: '#b45309',
     bgColor: '#fff7ed',
     borderColor: '#f97316',
   },
   [PremiumStatus.EXTREME]: {
-    label: '极高溢价',
+    label: '极高',
     color: '#b91c1c',
     bgColor: '#fef2f2',
     borderColor: '#ef4444',

@@ -3,6 +3,8 @@
     "code": "159509",
     "name": "纳指科技ETF景顺 (159509)",
     "short_name": "纳指科技ETF景顺",
+    "tracking_index": "NASDAQ_TECH",
+    "tracking_index_name": "纳斯达克科技市值加权指数",
     "latest": {
       "date": "2026-06-04",
       "close": 2.813,
