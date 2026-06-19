@@ -38,14 +38,16 @@
           :member-count="group.members.length"
           :min-premium="group.min_premium"
           :max-premium="group.max_premium"
+          :min-status="group.min_status"
+          :max-status="group.max_status"
         />
         <view class="group-body">
           <view v-if="group.members.length >= 2" class="tile-grid">
             <EtfMiniTile
               v-for="item in group.members"
-              :key="item.info.code"
-              :code="item.info.code"
-              :name="item.info.short_name || item.info.name || item.info.code"
+              :key="item.code"
+              :code="item.code"
+              :name="item.displayName"
               :latest="item.stats.latest"
               :percentile="item.stats.percentile"
               :status="item.stats.status"
@@ -55,8 +57,8 @@
           <EtfCard
             v-for="item in group.members"
             v-else
-            :key="item.info.code"
-            :code="item.info.code"
+            :key="item.code"
+            :code="item.code"
             :name="item.displayName"
             :latest="item.stats.latest"
             :percentile="item.stats.percentile"
@@ -75,15 +77,14 @@ import { onPullDownRefresh } from '@dcloudio/uni-app'
 import EtfCard from '../../components/EtfCard.vue'
 import EtfGroupHeader from '../../components/EtfGroupHeader.vue'
 import EtfMiniTile from '../../components/EtfMiniTile.vue'
-import { fetchEtfs, fetchPremiumHistory, PREMIUM_CACHE_UPDATED_EVENT } from '../../api'
-import type { EtfInfo, EtfPremiumHistory, PremiumRange, PremiumStats } from '../../types'
+import { fetchDashboard, PREMIUM_CACHE_UPDATED_EVENT } from '../../api'
+import type { DashboardSnapshot, DashboardStats, PremiumRange, PremiumStatus } from '../../types'
 import { RANGE_OPTIONS } from '../../types'
-import { summarizePremium } from '../../utils/premium'
 
 interface DashboardItem {
-  info: EtfInfo
+  code: string
   displayName: string
-  stats: PremiumStats
+  stats: DashboardStats
 }
 
 interface DashboardGroup {
@@ -92,72 +93,54 @@ interface DashboardGroup {
   members: DashboardItem[]
   min_premium: number | null
   max_premium: number | null
+  min_status: PremiumStatus | null
+  max_status: PremiumStatus | null
 }
-
-const FALLBACK_INDEX_KEY = '__UNGROUPED__'
-const FALLBACK_INDEX_NAME = '未分类'
 
 const loading = ref(true)
 const error = ref('')
-const etfs = ref<EtfInfo[]>([])
-const histories = ref<Record<string, EtfPremiumHistory>>({})
-const selectedRange = ref<PremiumRange>('1y')
-
-const dashboardItems = computed<DashboardItem[]>(() => (
-  etfs.value
-    .map((info) => {
-      const history = histories.value[info.code]
-      const fallback = info.latest ? [info.latest] : []
-      return {
-        info,
-        displayName: history?.short_name || history?.name || info.short_name || info.name || info.code,
-        stats: summarizePremium(history?.data || fallback, selectedRange.value),
-      }
-    })
-    .filter((item) => item.stats.latest)
-))
+const dashboard = ref<DashboardSnapshot | null>(null)
+const selectedRange = ref<PremiumRange>('3m')
 
 const dashboardGroups = computed<DashboardGroup[]>(() => {
-  const order: string[] = []
-  const groups = new Map<string, DashboardGroup>()
+  const snapshot = dashboard.value
+  if (!snapshot) return []
 
-  for (const item of dashboardItems.value) {
-    const key = item.info.tracking_index || FALLBACK_INDEX_KEY
-    const name = item.info.tracking_index_name || FALLBACK_INDEX_NAME
+  const itemByCode = new Map(snapshot.items.map((item) => [item.code, item]))
 
-    let group = groups.get(key)
-    if (!group) {
-      group = {
-        tracking_index: key,
-        tracking_index_name: name,
-        members: [],
-        min_premium: null,
-        max_premium: null,
+  return snapshot.groups
+    .map((group) => {
+      const members = group.members
+        .map((code) => itemByCode.get(code))
+        .filter((item): item is NonNullable<typeof item> => !!item)
+        .map((item) => ({
+          code: item.code,
+          displayName: item.short_name || item.name || item.code,
+          stats: item.stats[selectedRange.value],
+        }))
+        .filter((item) => item.stats.latest)
+
+      members.sort((a, b) => {
+        const pa = a.stats.latest?.premium_rate ?? Number.POSITIVE_INFINITY
+        const pb = b.stats.latest?.premium_rate ?? Number.POSITIVE_INFINITY
+        return pa - pb
+      })
+
+      const range = group.ranges[selectedRange.value]
+      const minMember = members[0]
+      const maxMember = members[members.length - 1]
+
+      return {
+        tracking_index: group.tracking_index,
+        tracking_index_name: group.tracking_index_name,
+        members,
+        min_premium: range.min_premium,
+        max_premium: range.max_premium,
+        min_status: minMember?.stats.status ?? null,
+        max_status: maxMember?.stats.status ?? null,
       }
-      groups.set(key, group)
-      order.push(key)
-    }
-    group.members.push(item)
-  }
-
-  for (const group of groups.values()) {
-    group.members.sort((a, b) => {
-      const pa = a.stats.latest?.premium_rate ?? Number.POSITIVE_INFINITY
-      const pb = b.stats.latest?.premium_rate ?? Number.POSITIVE_INFINITY
-      return pa - pb
     })
-
-    const rates = group.members
-      .map((member) => member.stats.latest?.premium_rate)
-      .filter((value): value is number => typeof value === 'number' && Number.isFinite(value))
-
-    if (rates.length > 0) {
-      group.min_premium = Math.min(...rates)
-      group.max_premium = Math.max(...rates)
-    }
-  }
-
-  return order.map((key) => groups.get(key)!).filter(Boolean)
+    .filter((group) => group.members.length > 0)
 })
 
 async function loadData(forceRefresh = false, silent = false) {
@@ -167,13 +150,7 @@ async function loadData(forceRefresh = false, silent = false) {
   }
 
   try {
-    const list = await fetchEtfs(forceRefresh)
-    const historyPairs = await Promise.all(
-      list.map(async (info) => [info.code, await fetchPremiumHistory(info.code, forceRefresh)] as const),
-    )
-
-    etfs.value = list
-    histories.value = Object.fromEntries(historyPairs)
+    dashboard.value = await fetchDashboard(forceRefresh)
     error.value = ''
   } catch (err: any) {
     if (!silent) {
@@ -220,7 +197,7 @@ onPullDownRefresh(async () => {
 
 .range-tabs {
   display: grid;
-  grid-template-columns: repeat(2, 1fr);
+  grid-template-columns: repeat(3, 1fr);
   gap: 8rpx;
   margin: 0 0 22rpx;
   padding: 6rpx;

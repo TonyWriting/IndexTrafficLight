@@ -22,7 +22,7 @@ export interface EtfPremiumHistory {
   data: PremiumRecord[]
 }
 
-export type PremiumRange = '1y' | '3y'
+export type PremiumRange = '3m' | '1y' | '3y'
 
 export interface RangeOption {
   value: PremiumRange
@@ -30,6 +30,7 @@ export interface RangeOption {
 }
 
 export const RANGE_OPTIONS: RangeOption[] = [
+  { value: '3m', label: '近3月' },
   { value: '1y', label: '近1年' },
   { value: '3y', label: '近3年' },
 ]
@@ -51,7 +52,7 @@ export interface PremiumStatusConfig {
 
 export const PREMIUM_STATUS_CONFIG: Record<PremiumStatus, PremiumStatusConfig> = {
   [PremiumStatus.LOW]: {
-    label: '极低',
+    label: '过低',
     color: '#047857',
     bgColor: '#ecfdf5',
     borderColor: '#10b981',
@@ -63,7 +64,7 @@ export const PREMIUM_STATUS_CONFIG: Record<PremiumStatus, PremiumStatusConfig> =
     borderColor: '#22c55e',
   },
   [PremiumStatus.NORMAL]: {
-    label: '常态',
+    label: '适中',
     color: '#92400e',
     bgColor: '#fffbeb',
     borderColor: '#f59e0b',
@@ -75,7 +76,7 @@ export const PREMIUM_STATUS_CONFIG: Record<PremiumStatus, PremiumStatusConfig> =
     borderColor: '#f97316',
   },
   [PremiumStatus.EXTREME]: {
-    label: '极高',
+    label: '过高',
     color: '#b91c1c',
     bgColor: '#fef2f2',
     borderColor: '#ef4444',
@@ -95,6 +96,41 @@ export interface PremiumStats {
   p90: number | null
   min: number | null
   max: number | null
+}
+
+export interface DashboardRangeSummary {
+  min_premium: number | null
+  max_premium: number | null
+}
+
+export interface DashboardLatestRecord {
+  date: string
+  premium_rate: number
+}
+
+export interface DashboardStats {
+  latest: DashboardLatestRecord | null
+  percentile: number
+  status: PremiumStatus
+}
+
+export interface DashboardItem {
+  code: string
+  name: string
+  short_name: string
+  stats: Record<PremiumRange, DashboardStats>
+}
+
+export interface DashboardGroup {
+  tracking_index: string
+  tracking_index_name: string
+  members: string[]
+  ranges: Record<PremiumRange, DashboardRangeSummary>
+}
+
+export interface DashboardSnapshot {
+  items: DashboardItem[]
+  groups: DashboardGroup[]
 }
 
 export const PREMIUM_LINE_COLOR = '#2563eb'

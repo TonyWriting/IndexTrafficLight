@@ -6,27 +6,44 @@
     </view>
     <view v-if="memberCount >= 2" class="range-row">
       <view class="range-item">
-        <text class="range-label">最低溢价</text>
-        <text class="range-value range-low" selectable>{{ formatPremiumRate(minPremium) }}</text>
+        <text class="range-label">最低溢价率</text>
+        <text class="range-value" :style="{ color: minColor }" selectable>
+          {{ formatPremiumRate(minPremium) }}
+        </text>
       </view>
       <view class="range-divider" />
       <view class="range-item">
-        <text class="range-label">最高溢价</text>
-        <text class="range-value range-high" selectable>{{ formatPremiumRate(maxPremium) }}</text>
+        <text class="range-label">最高溢价率</text>
+        <text class="range-value" :style="{ color: maxColor }" selectable>
+          {{ formatPremiumRate(maxPremium) }}
+        </text>
       </view>
     </view>
   </view>
 </template>
 
 <script setup lang="ts">
+import { computed } from 'vue'
+import type { PremiumStatus } from '../types'
+import { PREMIUM_STATUS_CONFIG } from '../types'
 import { formatPremiumRate } from '../utils/premium'
 
-defineProps<{
+const props = defineProps<{
   trackingIndexName: string
   memberCount: number
   minPremium: number | null
   maxPremium: number | null
+  minStatus: PremiumStatus | null
+  maxStatus: PremiumStatus | null
 }>()
+
+const fallbackColor = '#475569'
+const minColor = computed(() => (
+  props.minStatus ? PREMIUM_STATUS_CONFIG[props.minStatus].color : fallbackColor
+))
+const maxColor = computed(() => (
+  props.maxStatus ? PREMIUM_STATUS_CONFIG[props.maxStatus].color : fallbackColor
+))
 </script>
 
 <style scoped>
@@ -94,13 +111,5 @@ defineProps<{
   font-size: 28rpx;
   font-weight: 700;
   line-height: 36rpx;
-}
-
-.range-low {
-  color: #16a34a;
-}
-
-.range-high {
-  color: #dc2626;
 }
 </style>

@@ -1,9 +1,10 @@
 import type { PremiumRange, PremiumRecord, PremiumStats } from '../types'
 import { PremiumStatus } from '../types'
 
-const RANGE_YEARS: Record<PremiumRange, number> = {
-  '1y': 1,
-  '3y': 3,
+const RANGE_MONTHS: Record<PremiumRange, number> = {
+  '3m': 3,
+  '1y': 12,
+  '3y': 36,
 }
 
 function isFiniteNumber(value: unknown): value is number {
@@ -14,13 +15,15 @@ function daysInMonth(year: number, month: number): number {
   return new Date(year, month, 0).getDate()
 }
 
-function shiftYear(dateStr: string, years: number): string {
+function shiftMonth(dateStr: string, months: number): string {
   const [year, month, day] = dateStr.split('-').map(Number)
-  const targetYear = year + years
-  const targetDay = Math.min(day, daysInMonth(targetYear, month))
+  const monthIndex = year * 12 + month - 1 + months
+  const targetYear = Math.floor(monthIndex / 12)
+  const targetMonth = (monthIndex % 12) + 1
+  const targetDay = Math.min(day, daysInMonth(targetYear, targetMonth))
   return [
     String(targetYear).padStart(4, '0'),
-    String(month).padStart(2, '0'),
+    String(targetMonth).padStart(2, '0'),
     String(targetDay).padStart(2, '0'),
   ].join('-')
 }
@@ -45,7 +48,7 @@ export function filterByRange(
   if (sorted.length === 0) return sorted
 
   const latestDate = sorted[sorted.length - 1].date
-  const cutoff = shiftYear(latestDate, -RANGE_YEARS[range])
+  const cutoff = shiftMonth(latestDate, -RANGE_MONTHS[range])
   return sorted.filter((record) => record.date >= cutoff)
 }
 

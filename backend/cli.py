@@ -1,12 +1,17 @@
 """CLI tool for QDII ETF premium data management."""
 
 import argparse
+import json
 import logging
+import os
+import sys
 from datetime import date, timedelta
+from pathlib import Path
 
 from shared.config import TRACKED_ETFS, EtfConfig
+from shared.dashboard import build_dashboard_snapshot
 from shared.pipeline import RefreshResult, refresh_etf_premium
-from shared.storage import get_premium_history
+from shared.storage import get_premium_history, upsert_dashboard_snapshot
 
 logging.basicConfig(
     level=logging.INFO,
@@ -18,6 +23,38 @@ logging.getLogger("azure.core.pipeline.policies.http_logging_policy").setLevel(
 logger = logging.getLogger(__name__)
 
 DEFAULT_QUERY_LIMIT = 10
+LOCAL_SETTINGS_PATH = Path(__file__).with_name("local.settings.json")
+
+
+def _load_local_settings() -> None:
+    """Load Azure Functions local settings for CLI runs."""
+    if not LOCAL_SETTINGS_PATH.exists():
+        return
+
+    settings = json.loads(LOCAL_SETTINGS_PATH.read_text(encoding="utf-8-sig"))
+    values = settings.get("Values", {})
+    if not isinstance(values, dict):
+        return
+
+    for key, value in values.items():
+        if isinstance(value, str) and key not in os.environ:
+            os.environ[key] = value
+
+
+def _safe_print(message: str) -> None:
+    """Print progress without failing on legacy Windows encodings."""
+    try:
+        print(message, flush=True)
+    except UnicodeEncodeError:
+        encoding = sys.stdout.encoding or "utf-8"
+        safe_message = message.encode(
+            encoding,
+            errors="replace",
+        ).decode(
+            encoding,
+            errors="replace",
+        )
+        print(safe_message, flush=True)
 
 
 def _selected_configs(code: str = "") -> list[EtfConfig]:
@@ -119,7 +156,24 @@ def cmd_query(args: argparse.Namespace) -> None:
         )
 
 
+def cmd_dashboard(args: argparse.Namespace) -> None:
+    """Build and store the latest dashboard snapshot."""
+    def print_progress(code: str, name: str) -> None:
+        _safe_print(f"  processing {code} {name}")
+
+    print("\n[dashboard] building snapshot")
+    snapshot = upsert_dashboard_snapshot(
+        build_dashboard_snapshot(on_etf_start=print_progress)
+    )
+    print("\n[dashboard] snapshot complete")
+    print(f"  generated_at_bj={snapshot['generated_at_bj']}")
+    print(f"  items={len(snapshot['items'])}")
+    print(f"  groups={len(snapshot['groups'])}")
+
+
 def main() -> None:
+    _load_local_settings()
+
     parser = argparse.ArgumentParser(
         description="Index Traffic Light backend ETF premium CLI"
     )
@@ -183,6 +237,12 @@ def main() -> None:
         help="Maximum rows to print, default: 10; use 0 for all",
     )
     p_query.set_defaults(func=cmd_query)
+
+    p_dashboard = subparsers.add_parser(
+        "dashboard",
+        help="Build and store the latest precomputed dashboard snapshot",
+    )
+    p_dashboard.set_defaults(func=cmd_dashboard)
 
     args = parser.parse_args()
     args.func(args)

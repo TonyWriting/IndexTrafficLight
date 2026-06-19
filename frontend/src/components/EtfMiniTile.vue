@@ -22,14 +22,14 @@
 
 <script setup lang="ts">
 import { computed } from 'vue'
-import type { PremiumRecord, PremiumStatus } from '../types'
+import type { DashboardLatestRecord, PremiumStatus } from '../types'
 import { PREMIUM_STATUS_CONFIG } from '../types'
 import { formatPremiumRate, formatShortDate } from '../utils/premium'
 
 const props = defineProps<{
   code: string
   name: string
-  latest: PremiumRecord | null
+  latest: DashboardLatestRecord | null
   percentile: number
   status: PremiumStatus
 }>()

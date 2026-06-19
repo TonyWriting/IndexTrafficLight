@@ -17,7 +17,7 @@
 
     <view class="primary-row">
       <view class="premium-block">
-        <text class="metric-label">当前溢价</text>
+        <text class="metric-label">当前溢价率</text>
         <text class="premium-value" :style="{ color: statusConfig.color }" selectable>
           {{ formatPremiumRate(latest?.premium_rate) }}
         </text>
@@ -32,14 +32,14 @@
 
 <script setup lang="ts">
 import { computed } from 'vue'
-import type { PremiumRecord, PremiumStatus } from '../types'
+import type { DashboardLatestRecord, PremiumStatus } from '../types'
 import { PREMIUM_STATUS_CONFIG } from '../types'
 import { formatPremiumRate, formatShortDate } from '../utils/premium'
 
 const props = defineProps<{
   code: string
   name: string
-  latest: PremiumRecord | null
+  latest: DashboardLatestRecord | null
   percentile: number
   status: PremiumStatus
 }>()

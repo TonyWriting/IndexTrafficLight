@@ -1,5 +1,6 @@
 """Azure Table Storage operations for QDII ETF premium data."""
 
+import json
 import logging
 import os
 import time
@@ -11,6 +12,10 @@ logger = logging.getLogger(__name__)
 TABLE_PRICE_HISTORY = "QDIIEtfPriceHistory"
 TABLE_NAV_HISTORY = "QDIIEtfNavHistory"
 TABLE_PREMIUM_HISTORY = "QDIIEtfPremiumHistory"
+TABLE_DASHBOARD_SNAPSHOT = "QDIIEtfDashboardSnapshot"
+
+DASHBOARD_PARTITION_KEY = "dashboard"
+DASHBOARD_ROW_KEY = "latest"
 
 
 def _get_connection_string() -> str:
@@ -169,3 +174,46 @@ def get_latest_premium(etf_code: str) -> dict | None:
     if not records:
         return None
     return records[-1]
+
+
+def upsert_dashboard_snapshot(payload: dict) -> dict:
+    """Store the precomputed dashboard payload as the latest snapshot."""
+    generated_at = payload.get("generated_at_bj") or _beijing_now()
+    version = payload.get("version", "v1")
+    payload_to_store = {
+        **payload,
+        "generated_at_bj": generated_at,
+        "version": version,
+    }
+    entity = {
+        "PartitionKey": DASHBOARD_PARTITION_KEY,
+        "RowKey": DASHBOARD_ROW_KEY,
+        "generated_at_bj": generated_at,
+        "version": version,
+        "payload_json": json.dumps(
+            payload_to_store,
+            ensure_ascii=False,
+            separators=(",", ":"),
+        ),
+    }
+    _upsert_entities(TABLE_DASHBOARD_SNAPSHOT, [entity])
+    return payload_to_store
+
+
+def get_dashboard_snapshot() -> dict | None:
+    """Read the latest precomputed dashboard payload."""
+    from azure.core.exceptions import ResourceNotFoundError
+
+    table = _get_table_client(TABLE_DASHBOARD_SNAPSHOT)
+    try:
+        entity = table.get_entity(
+            partition_key=DASHBOARD_PARTITION_KEY,
+            row_key=DASHBOARD_ROW_KEY,
+        )
+    except ResourceNotFoundError:
+        return None
+
+    payload = json.loads(entity["payload_json"])
+    payload.setdefault("generated_at_bj", entity.get("generated_at_bj"))
+    payload.setdefault("version", entity.get("version", "v1"))
+    return payload

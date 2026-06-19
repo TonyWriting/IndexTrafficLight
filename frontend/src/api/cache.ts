@@ -5,7 +5,7 @@ interface CacheEntry<T> {
   timestamp: number
 }
 
-export function removeCache(key: string): void {
+function removeCache(key: string): void {
   try {
     uni.removeStorageSync(key)
   } catch {
@@ -30,12 +30,21 @@ export function getCache<T>(key: string): T | null {
   try {
     const raw = uni.getStorageSync(key)
     if (!raw) return null
-    const entry: CacheEntry<T> = JSON.parse(raw)
+    const entry = JSON.parse(raw) as Partial<CacheEntry<T>>
+    if (
+      !entry
+      || typeof entry.timestamp !== 'number'
+      || !Number.isFinite(entry.timestamp)
+      || !('data' in entry)
+    ) {
+      removeCache(key)
+      return null
+    }
     if (Date.now() - entry.timestamp > CACHE_EXPIRY_MS) {
       removeCache(key)
       return null
     }
-    return entry.data
+    return entry.data as T
   } catch {
     removeCache(key)
     return null
@@ -46,6 +55,10 @@ export function getCache<T>(key: string): T | null {
  * Set cache with current timestamp.
  */
 export function setCache<T>(key: string, data: T): void {
-  const entry: CacheEntry<T> = { data, timestamp: Date.now() }
-  uni.setStorageSync(key, JSON.stringify(entry))
+  try {
+    const entry: CacheEntry<T> = { data, timestamp: Date.now() }
+    uni.setStorageSync(key, JSON.stringify(entry))
+  } catch {
+    // Ignore storage quota or platform storage errors.
+  }
 }

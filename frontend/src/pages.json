@@ -10,7 +10,7 @@
     {
       "path": "pages/detail/detail",
       "style": {
-        "navigationBarTitleText": "溢价详情"
+        "navigationBarTitleText": "溢价率详情"
       }
     }
   ],
