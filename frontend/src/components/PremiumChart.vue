@@ -495,7 +495,7 @@ onMounted(redrawLater)
   background: #ffffff;
   border: 1rpx solid #e2e8f0;
   border-radius: 16rpx;
-  padding: 24rpx;
+  padding: 24rpx 8rpx;
   margin-top: 20rpx;
 }
 
@@ -571,7 +571,7 @@ onMounted(redrawLater)
 
 .chart-canvas {
   width: 100%;
-  height: 500rpx;
+  height: 400rpx;
   margin-top: 18rpx;
 }
 

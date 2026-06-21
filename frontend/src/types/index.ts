@@ -64,7 +64,7 @@ export const PREMIUM_STATUS_CONFIG: Record<PremiumStatus, PremiumStatusConfig> =
     borderColor: '#22c55e',
   },
   [PremiumStatus.NORMAL]: {
-    label: '适中',
+    label: '中游',
     color: '#92400e',
     bgColor: '#fffbeb',
     borderColor: '#f59e0b',

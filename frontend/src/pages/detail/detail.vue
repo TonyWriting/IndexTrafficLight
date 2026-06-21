@@ -137,7 +137,7 @@
                 class="sheet-disclaimer"
                 selectable
                 user-select
-              ><text v-if="index === 0" class="sheet-disclaimer-lead">免责说明：</text>{{ paragraph }}</text>
+              ><text v-if="index === 0">免责说明：</text>{{ paragraph }}</text>
             </view>
           </scroll-view>
         </view>
@@ -168,7 +168,7 @@
 
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref } from 'vue'
-import { onLoad } from '@dcloudio/uni-app'
+import { onLoad, onShareAppMessage, onShareTimeline } from '@dcloudio/uni-app'
 import PremiumChart from '../../components/PremiumChart.vue'
 import { fetchPremiumHistory, PREMIUM_CACHE_UPDATED_EVENT } from '../../api'
 import type { EtfPremiumHistory, PremiumRange } from '../../types'
@@ -188,7 +188,7 @@ const history = ref<EtfPremiumHistory | null>(null)
 const selectedRange = ref<PremiumRange>('1y')
 const explainSheetOpen = ref(false)
 
-const explainSummary = 'ETF 的场内交易价格和基金净值不是一回事。溢价率看的就是：场内价格相对基金净值多贵或便宜多少。'
+const explainSummary = 'ETF 的场内交易价格和基金净值不是一回事。溢价率看的是：场内价格相对基金净值多贵或便宜多少。'
 const premiumDefinitionParagraphs = [
   'ETF 有两个价格：场内交易价格由买卖报价实时决定，基金净值 NAV 则按每个净值日，根据基金持有的一篮子资产、汇率和费用等计算得出。溢价率比较的是：场内收盘价相对基金净值贵了多少或便宜多少。',
   '用于比较的基金净值口径有两类：盘中参考净值 IOPV，和收盘后确认的正式净值 NAV。本页使用 NAV 口径：收盘溢价率 = 场内收盘价 / 当日 NAV - 1。正数是溢价，负数是折价。',
@@ -204,15 +204,15 @@ const explainLevelItems = [
   },
   {
     label: '偏高',
-    detail: 'P70 <= 历史分位 < P90，高于适中区间。',
+    detail: 'P70 <= 历史分位 < P90，高于中游区间。',
   },
   {
-    label: '适中',
+    label: '中游',
     detail: 'P30 <= 历史分位 < P70，接近历史中枢。',
   },
   {
     label: '偏低',
-    detail: 'P10 <= 历史分位 < P30，低于适中区间。',
+    detail: 'P10 <= 历史分位 < P30，低于中游区间。',
   },
   {
     label: '过低',
@@ -287,6 +287,23 @@ onMounted(() => {
 onUnmounted(() => {
   uni.$off(PREMIUM_CACHE_UPDATED_EVENT, handlePremiumCacheUpdated)
 })
+
+function shareTitle(): string {
+  const latest = stats.value.latest
+  return latest
+    ? `${displayName.value} 溢价率 ${formatPremiumRate(latest.premium_rate)}`
+    : `${displayName.value} 溢价率走势`
+}
+
+onShareAppMessage(() => ({
+  title: shareTitle(),
+  path: `/pages/detail/detail?code=${encodeURIComponent(code.value)}`,
+}))
+
+onShareTimeline(() => ({
+  title: shareTitle(),
+  query: `code=${encodeURIComponent(code.value)}`,
+}))
 </script>
 
 <style scoped>
@@ -680,10 +697,6 @@ onUnmounted(() => {
 
 .sheet-disclaimer:first-child {
   margin-top: 0;
-}
-
-.sheet-disclaimer-lead {
-  color: #64748b;
 }
 
 .recent-panel {

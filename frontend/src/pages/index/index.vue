@@ -73,7 +73,7 @@
 
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref } from 'vue'
-import { onPullDownRefresh } from '@dcloudio/uni-app'
+import { onPullDownRefresh, onShareAppMessage, onShareTimeline } from '@dcloudio/uni-app'
 import EtfCard from '../../components/EtfCard.vue'
 import EtfGroupHeader from '../../components/EtfGroupHeader.vue'
 import EtfMiniTile from '../../components/EtfMiniTile.vue'
@@ -186,6 +186,17 @@ onPullDownRefresh(async () => {
   await loadData(true)
   uni.stopPullDownRefresh()
 })
+
+const SHARE_TITLE = 'QDII ETF 溢价灯 · 盘后看场内价格贵不贵'
+
+onShareAppMessage(() => ({
+  title: SHARE_TITLE,
+  path: '/pages/index/index',
+}))
+
+onShareTimeline(() => ({
+  title: SHARE_TITLE,
+}))
 </script>
 
 <style scoped>
