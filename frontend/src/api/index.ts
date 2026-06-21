@@ -25,13 +25,10 @@ const CACHE_KEYS = {
 } as const
 const STALE_CACHE_MATCHERS = [
   (key: string) => key.startsWith('cache_dashboard_') && key !== CACHE_KEYS.dashboard,
-  (key: string) => key.startsWith('cache_etfs'),
   (key: string) => (
     key.startsWith('cache_etf_premium_history_')
     && !key.startsWith(CACHE_KEYS.historyPrefix)
   ),
-  (key: string) => key === 'cache_indices',
-  (key: string) => key.startsWith('cache_history_'),
 ]
 const AUTO_REFRESH_INTERVAL_MS = 60 * 60 * 1000
 const HISTORY_PREFETCH_CONCURRENCY = 2
