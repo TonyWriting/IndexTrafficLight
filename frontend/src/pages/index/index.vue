@@ -1,6 +1,9 @@
 <template>
   <view class="dashboard">
-    <view class="range-tabs">
+    <view
+      v-if="!loading && !error && !dataUpdating && dashboardGroups.length > 0"
+      class="range-tabs"
+    >
       <view
         v-for="option in RANGE_OPTIONS"
         :key="option.value"
@@ -21,6 +24,10 @@
       <view class="state-action" @click="loadData(true)">
         <text>重试</text>
       </view>
+    </view>
+
+    <view v-else-if="dataUpdating" class="state-panel">
+      <text>{{ dashboard?.message || '数据更新中' }}</text>
     </view>
 
     <view v-else-if="dashboardGroups.length === 0" class="state-panel">
@@ -101,6 +108,7 @@ const loading = ref(true)
 const error = ref('')
 const dashboard = ref<DashboardSnapshot | null>(null)
 const selectedRange = ref<PremiumRange>('3m')
+const dataUpdating = computed(() => dashboard.value?.data_enabled === false)
 
 const dashboardGroups = computed<DashboardGroup[]>(() => {
   const snapshot = dashboard.value

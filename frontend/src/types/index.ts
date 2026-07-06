@@ -6,6 +6,7 @@ export interface PremiumRecord {
 }
 
 export interface EtfInfo {
+  data_enabled?: boolean
   code: string
   name: string
   short_name: string
@@ -15,6 +16,8 @@ export interface EtfInfo {
 }
 
 export interface EtfPremiumHistory {
+  data_enabled?: boolean
+  message?: string
   code: string
   name: string
   short_name: string
@@ -129,6 +132,8 @@ export interface DashboardGroup {
 }
 
 export interface DashboardSnapshot {
+  data_enabled?: boolean
+  message?: string
   items: DashboardItem[]
   groups: DashboardGroup[]
 }

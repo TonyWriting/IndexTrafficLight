@@ -18,11 +18,15 @@ const MOCK_MODE = import.meta.env.VITE_USE_MOCK
 const USE_MOCK = MOCK_MODE === 'true' || (MOCK_MODE !== 'false' && !BASE_URL)
 const DISABLE_CACHE = import.meta.env.VITE_DISABLE_CACHE === 'true'
 
-const CACHE_VERSION = 'v9'
+const CACHE_VERSION = 'v11'
 const CACHE_KEYS = {
   dashboard: `cache_dashboard_${CACHE_VERSION}`,
   historyPrefix: `cache_etf_premium_history_${CACHE_VERSION}_`,
 } as const
+const PREMIUM_CACHE_MATCHERS = [
+  (key: string) => key.startsWith('cache_dashboard_'),
+  (key: string) => key.startsWith('cache_etf_premium_history_'),
+]
 const STALE_CACHE_MATCHERS = [
   (key: string) => key.startsWith('cache_dashboard_') && key !== CACHE_KEYS.dashboard,
   (key: string) => (
@@ -42,6 +46,7 @@ let warmupPromise: Promise<void> | null = null
 let refreshAllPromise: Promise<void> | null = null
 let historyPrefetchTimer: ReturnType<typeof setTimeout> | null = null
 let activeHistoryPrefetchCount = 0
+let publicDataEnabled: boolean | null = null
 const inFlight = new Map<string, Promise<unknown>>()
 const historyPrefetchQueue: string[] = []
 const queuedHistoryCodes = new Set<string>()
@@ -93,6 +98,24 @@ function clearStaleCacheOnce(): void {
   clearCacheKeys((key) => STALE_CACHE_MATCHERS.some((matches) => matches(key)))
 }
 
+function clearPremiumDataCache(): void {
+  clearCacheKeys((key) => PREMIUM_CACHE_MATCHERS.some((matches) => matches(key)))
+}
+
+function publicDataDisabled(data: { data_enabled?: boolean }): boolean {
+  return data.data_enabled === false
+}
+
+function markPublicDataDisabled(): void {
+  publicDataEnabled = false
+  clearHistoryPrefetchQueue()
+  clearPremiumDataCache()
+}
+
+function markPublicDataEnabled(): void {
+  publicDataEnabled = true
+}
+
 function singleFlight<T>(key: string, task: () => Promise<T>): Promise<T> {
   const running = inFlight.get(key) as Promise<T> | undefined
   if (running) return running
@@ -119,12 +142,20 @@ function getCachedHistory(code: string): EtfPremiumHistory | null {
 }
 
 function setHistoryCache(code: string, data: EtfPremiumHistory): void {
-  if (!DISABLE_CACHE) setCache(historyCacheKey(code), data)
+  if (!DISABLE_CACHE && publicDataEnabled === true) {
+    setCache(historyCacheKey(code), data)
+  }
 }
 
 function fetchHistoryFromNetwork(code: string): Promise<EtfPremiumHistory> {
   return singleFlight(historyRequestKey(code), async () => {
     const data = await request<EtfPremiumHistory>(`/api/etfs/history?code=${encodeURIComponent(code)}`)
+    if (publicDataDisabled(data)) {
+      markPublicDataDisabled()
+      return data
+    }
+
+    markPublicDataEnabled()
     setHistoryCache(code, data)
     return data
   })
@@ -289,6 +320,7 @@ function buildMockDashboard(): DashboardSnapshot {
   })
 
   return {
+    data_enabled: true,
     items,
     groups: order.map((key) => groupsByKey.get(key)!).filter(Boolean),
   }
@@ -308,6 +340,12 @@ export async function fetchDashboard(forceRefresh = false): Promise<DashboardSna
 
   return singleFlight('dashboard', async () => {
     const data = await request<DashboardSnapshot>('/api/dashboard')
+    if (publicDataDisabled(data)) {
+      markPublicDataDisabled()
+      return data
+    }
+
+    markPublicDataEnabled()
     if (!DISABLE_CACHE) setCache(CACHE_KEYS.dashboard, data)
     enqueueDashboardHistoryPrefetch(data)
     return data

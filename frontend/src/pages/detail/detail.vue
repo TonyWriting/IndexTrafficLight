@@ -11,6 +11,10 @@
       </view>
     </view>
 
+    <view v-else-if="dataUpdating" class="state-panel">
+      <text>{{ history?.message || '数据更新中' }}</text>
+    </view>
+
     <view v-else-if="!stats.latest" class="state-panel">
       <text>暂无数据</text>
     </view>
@@ -187,6 +191,7 @@ const error = ref('')
 const history = ref<EtfPremiumHistory | null>(null)
 const selectedRange = ref<PremiumRange>('1y')
 const explainSheetOpen = ref(false)
+const dataUpdating = computed(() => history.value?.data_enabled === false)
 
 const explainSummary = 'ETF 的场内交易价格和基金净值不是一回事。溢价率看的是：场内价格相对基金净值多贵或便宜多少。'
 const premiumDefinitionParagraphs = [
@@ -256,7 +261,9 @@ async function loadData(forceRefresh = false, silent = false) {
 
   try {
     history.value = await fetchPremiumHistory(code.value, forceRefresh)
-    uni.setNavigationBarTitle({ title: history.value.short_name || code.value })
+    uni.setNavigationBarTitle({
+      title: history.value.data_enabled === false ? '数据更新中' : (history.value.short_name || code.value),
+    })
     error.value = ''
   } catch (err: any) {
     if (!silent) {
