@@ -18,7 +18,7 @@ const MOCK_MODE = import.meta.env.VITE_USE_MOCK
 const USE_MOCK = MOCK_MODE === 'true' || (MOCK_MODE !== 'false' && !BASE_URL)
 const DISABLE_CACHE = import.meta.env.VITE_DISABLE_CACHE === 'true'
 
-const CACHE_VERSION = 'v17'
+const CACHE_VERSION = 'v20'
 const CACHE_KEYS = {
   dashboard: `cache_dashboard_${CACHE_VERSION}`,
   historyPrefix: `cache_etf_premium_history_${CACHE_VERSION}_`,

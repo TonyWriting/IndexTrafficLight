@@ -122,23 +122,23 @@
               <text class="sheet-paragraph" selectable user-select>{{ premiumLevelIntro }}</text>
               <view class="level-row">
                 <text class="level-label level-extreme" selectable user-select>过高</text>
-                <text class="level-detail" selectable user-select>历史分位 >= P90，处在自身历史高位。</text>
+                <text class="level-detail" selectable user-select>历史分位 P90 或以上</text>
               </view>
               <view class="level-row">
                 <text class="level-label level-above-normal" selectable user-select>偏高</text>
-                <text class="level-detail" selectable user-select>P70 &lt;= 历史分位 &lt; P90，高于中游区间。</text>
+                <text class="level-detail" selectable user-select>历史分位 P70（含）至 P90（不含）</text>
               </view>
               <view class="level-row">
                 <text class="level-label level-normal" selectable user-select>中游</text>
-                <text class="level-detail" selectable user-select>P30 &lt;= 历史分位 &lt; P70，接近历史中枢。</text>
+                <text class="level-detail" selectable user-select>历史分位 P30（含）至 P70（不含）</text>
               </view>
               <view class="level-row">
                 <text class="level-label level-below-normal" selectable user-select>偏低</text>
-                <text class="level-detail" selectable user-select>P10 &lt;= 历史分位 &lt; P30，低于中游区间。</text>
+                <text class="level-detail" selectable user-select>历史分位 P10（含）至 P30（不含）</text>
               </view>
               <view class="level-row">
                 <text class="level-label level-low" selectable user-select>过低</text>
-                <text class="level-detail" selectable user-select>历史分位 &lt; P10，处在自身历史低位。</text>
+                <text class="level-detail" selectable user-select>历史分位低于 P10</text>
               </view>
             </view>
 
@@ -691,7 +691,7 @@ onShareTimeline(() => ({
   flex-shrink: 0;
   width: 64rpx;
   font-size: 25rpx;
-  font-weight: 800;
+  font-weight: 650;
   line-height: 36rpx;
 }
 
