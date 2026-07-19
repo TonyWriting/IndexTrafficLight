@@ -11,10 +11,6 @@
       </view>
     </view>
 
-    <view v-else-if="dataUpdating" class="state-panel">
-      <text>{{ history?.message || '数据更新中' }}</text>
-    </view>
-
     <view v-else-if="!stats.latest" class="state-panel">
       <text>暂无数据</text>
     </view>
@@ -124,13 +120,25 @@
             <view class="sheet-section">
               <text class="sheet-section-title" selectable user-select>2. 溢价率高低怎么看</text>
               <text class="sheet-paragraph" selectable user-select>{{ premiumLevelIntro }}</text>
-              <view
-                v-for="item in explainLevelItems"
-                :key="item.label"
-                class="level-row"
-              >
-                <text class="level-label" selectable user-select>{{ item.label }}</text>
-                <text class="level-detail" selectable user-select>{{ item.detail }}</text>
+              <view class="level-row">
+                <text class="level-label level-extreme" selectable user-select>过高</text>
+                <text class="level-detail" selectable user-select>历史分位 >= P90，处在自身历史高位。</text>
+              </view>
+              <view class="level-row">
+                <text class="level-label level-above-normal" selectable user-select>偏高</text>
+                <text class="level-detail" selectable user-select>P70 &lt;= 历史分位 &lt; P90，高于中游区间。</text>
+              </view>
+              <view class="level-row">
+                <text class="level-label level-normal" selectable user-select>中游</text>
+                <text class="level-detail" selectable user-select>P30 &lt;= 历史分位 &lt; P70，接近历史中枢。</text>
+              </view>
+              <view class="level-row">
+                <text class="level-label level-below-normal" selectable user-select>偏低</text>
+                <text class="level-detail" selectable user-select>P10 &lt;= 历史分位 &lt; P30，低于中游区间。</text>
+              </view>
+              <view class="level-row">
+                <text class="level-label level-low" selectable user-select>过低</text>
+                <text class="level-detail" selectable user-select>历史分位 &lt; P10，处在自身历史低位。</text>
               </view>
             </view>
 
@@ -174,9 +182,17 @@
 import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { onLoad, onShareAppMessage, onShareTimeline } from '@dcloudio/uni-app'
 import PremiumChart from '../../components/PremiumChart.vue'
-import { fetchPremiumHistory, PREMIUM_CACHE_UPDATED_EVENT } from '../../api'
+import {
+  fetchPremiumHistory,
+  fetchReviewMode,
+  getCachedPremiumHistory,
+  PREMIUM_CACHE_UPDATED_EVENT,
+} from '../../api'
 import type { EtfPremiumHistory, PremiumRange } from '../../types'
-import { PREMIUM_STATUS_CONFIG, RANGE_OPTIONS } from '../../types'
+import {
+  PREMIUM_STATUS_CONFIG,
+  RANGE_OPTIONS,
+} from '../../types'
 import {
   filterByRange,
   formatPremiumRate,
@@ -191,7 +207,6 @@ const error = ref('')
 const history = ref<EtfPremiumHistory | null>(null)
 const selectedRange = ref<PremiumRange>('1y')
 const explainSheetOpen = ref(false)
-const dataUpdating = computed(() => history.value?.data_enabled === false)
 
 const explainSummary = 'ETF 的场内交易价格和基金净值不是一回事。溢价率看的是：场内价格相对基金净值多贵或便宜多少。'
 const premiumDefinitionParagraphs = [
@@ -202,28 +217,6 @@ const premiumDefinitionParagraphs = [
   'NAV 需要等基金公司披露后才能计算，因此可能和交易软件里的实时溢价率不同，最近一两天也可能暂时没有数据。它回答的是“今天收盘后确认，交易价格相对正式净值贵不贵”，不承担实时买卖提示的作用。',
 ]
 const premiumLevelIntro = '本页用当前溢价率在所选区间内的历史分位判断高低：分位越高，代表当前价格相对 NAV 越贵。'
-const explainLevelItems = [
-  {
-    label: '过高',
-    detail: '历史分位 >= P90，处在自身历史高位。',
-  },
-  {
-    label: '偏高',
-    detail: 'P70 <= 历史分位 < P90，高于中游区间。',
-  },
-  {
-    label: '中游',
-    detail: 'P30 <= 历史分位 < P70，接近历史中枢。',
-  },
-  {
-    label: '偏低',
-    detail: 'P10 <= 历史分位 < P30，低于中游区间。',
-  },
-  {
-    label: '过低',
-    detail: '历史分位 < P10，处在自身历史低位。',
-  },
-]
 const disclaimerParagraphs = [
   '本项目为个人维护的数据整理与展示工具，基于公开信息和本项目计算逻辑生成，不保证数据的准确性、完整性和及时性。内容仅供学习研究和信息参考，不构成任何投资建议，也不应作为买入或卖出依据。实际决策前请自行核验数据并阅读基金相关法律文件，市场有风险，投资需谨慎。',
 ]
@@ -260,11 +253,18 @@ async function loadData(forceRefresh = false, silent = false) {
   }
 
   try {
-    history.value = await fetchPremiumHistory(code.value, forceRefresh)
-    uni.setNavigationBarTitle({
-      title: history.value.data_enabled === false ? '数据更新中' : (history.value.short_name || code.value),
-    })
-    error.value = ''
+    const cached = !forceRefresh ? getCachedPremiumHistory(code.value) : null
+    if (cached) {
+      applyHistory(cached)
+      return
+    }
+
+    if (await fetchReviewMode()) {
+      closeUnavailableDetail()
+      return
+    }
+
+    applyHistory(await fetchPremiumHistory(code.value, forceRefresh))
   } catch (err: any) {
     if (!silent) {
       error.value = err?.message || '数据加载失败'
@@ -273,6 +273,23 @@ async function loadData(forceRefresh = false, silent = false) {
     if (!silent) {
       loading.value = false
     }
+  }
+}
+
+function applyHistory(data: EtfPremiumHistory): void {
+  history.value = data
+  uni.setNavigationBarTitle({
+    title: history.value.short_name || code.value,
+  })
+  error.value = ''
+}
+
+function closeUnavailableDetail() {
+  const pages = getCurrentPages()
+  if (pages.length > 1) {
+    uni.navigateBack({ delta: 1 })
+  } else {
+    uni.redirectTo({ url: '/pages/index/index' })
   }
 }
 
@@ -673,10 +690,29 @@ onShareTimeline(() => ({
 .level-label {
   flex-shrink: 0;
   width: 64rpx;
-  color: #0f172a;
   font-size: 25rpx;
   font-weight: 800;
   line-height: 36rpx;
+}
+
+.level-label.level-extreme {
+  color: #dc2626;
+}
+
+.level-label.level-above-normal {
+  color: #ea580c;
+}
+
+.level-label.level-normal {
+  color: #d97706;
+}
+
+.level-label.level-below-normal {
+  color: #22c55e;
+}
+
+.level-label.level-low {
+  color: #10b981;
 }
 
 .level-detail {

@@ -6,7 +6,6 @@ export interface PremiumRecord {
 }
 
 export interface EtfInfo {
-  data_enabled?: boolean
   code: string
   name: string
   short_name: string
@@ -16,8 +15,6 @@ export interface EtfInfo {
 }
 
 export interface EtfPremiumHistory {
-  data_enabled?: boolean
-  message?: string
   code: string
   name: string
   short_name: string
@@ -86,6 +83,14 @@ export const PREMIUM_STATUS_CONFIG: Record<PremiumStatus, PremiumStatusConfig> =
   },
 }
 
+export const PREMIUM_LEVEL_LINE_COLORS: Record<PremiumStatus, string> = {
+  [PremiumStatus.LOW]: 'rgba(16, 185, 129, 0.82)',
+  [PremiumStatus.BELOW_NORMAL]: 'rgba(34, 197, 94, 0.78)',
+  [PremiumStatus.NORMAL]: 'rgba(217, 119, 6, 0.76)',
+  [PremiumStatus.ABOVE_NORMAL]: 'rgba(234, 88, 12, 0.78)',
+  [PremiumStatus.EXTREME]: 'rgba(220, 38, 38, 0.82)',
+}
+
 export interface PremiumStats {
   latest: PremiumRecord | null
   count: number
@@ -132,8 +137,6 @@ export interface DashboardGroup {
 }
 
 export interface DashboardSnapshot {
-  data_enabled?: boolean
-  message?: string
   items: DashboardItem[]
   groups: DashboardGroup[]
 }

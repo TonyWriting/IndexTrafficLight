@@ -20,7 +20,7 @@ from shared.storage import (
 app = func.FunctionApp()
 logger = logging.getLogger(__name__)
 
-DATA_ENABLED_ENV = "PUBLIC_DATA_ENABLED"
+REVIEW_MODE_ENV = "REVIEW_MODE_ENABLED"
 
 
 def _json_response(body: object, status_code: int = 200) -> func.HttpResponse:
@@ -31,17 +31,9 @@ def _json_response(body: object, status_code: int = 200) -> func.HttpResponse:
     )
 
 
-def _public_data_enabled() -> bool:
-    value = os.environ.get(DATA_ENABLED_ENV, "")
-    return value.strip().lower() in {"1", "true", "yes", "on"}
-
-
-def _updating_payload(**extra: object) -> dict:
-    return {
-        "data_enabled": False,
-        "message": "数据更新中",
-        **extra,
-    }
+def _review_mode_enabled() -> bool:
+    value = os.environ.get(REVIEW_MODE_ENV, "")
+    return value.strip().lower() in {"1", "true"}
 
 
 def _invalid_code_response(code: str) -> func.HttpResponse:
@@ -130,21 +122,21 @@ def update_late_evening(timer: func.TimerRequest) -> None:
 @app.route(route="etfs", methods=["GET"], auth_level=func.AuthLevel.ANONYMOUS)
 def api_etfs(req: func.HttpRequest) -> func.HttpResponse:
     """Return all tracked ETFs with their latest premium record."""
-    if not _public_data_enabled():
-        return _json_response([])
-
     return _json_response([
         _etf_summary(config)
         for config in TRACKED_ETFS.values()
     ])
 
 
+@app.route(route="review-mode", methods=["GET"], auth_level=func.AuthLevel.ANONYMOUS)
+def api_review_mode(req: func.HttpRequest) -> func.HttpResponse:
+    """Return whether the Mini Program should use the review-safe UI."""
+    return _json_response({"review_mode": _review_mode_enabled()})
+
+
 @app.route(route="dashboard", methods=["GET"], auth_level=func.AuthLevel.ANONYMOUS)
 def api_dashboard(req: func.HttpRequest) -> func.HttpResponse:
     """Return the latest precomputed dashboard snapshot."""
-    if not _public_data_enabled():
-        return _json_response(_updating_payload(items=[], groups=[]))
-
     snapshot = get_dashboard_snapshot()
     if not snapshot:
         return _json_response(
@@ -152,7 +144,6 @@ def api_dashboard(req: func.HttpRequest) -> func.HttpResponse:
             status_code=503,
         )
     return _json_response({
-        "data_enabled": True,
         "items": snapshot["items"],
         "groups": snapshot["groups"],
     })
@@ -166,15 +157,6 @@ def api_dashboard(req: func.HttpRequest) -> func.HttpResponse:
 def api_etf_history(req: func.HttpRequest) -> func.HttpResponse:
     """Return calculated premium history for one ETF."""
     code = req.params.get("code", "")
-    if not _public_data_enabled():
-        return _json_response(_updating_payload(
-            code=code,
-            name=code,
-            short_name=code,
-            count=0,
-            data=[],
-        ))
-
     config = TRACKED_ETFS.get(code)
     if not config:
         return _invalid_code_response(code)
@@ -190,7 +172,6 @@ def api_etf_history(req: func.HttpRequest) -> func.HttpResponse:
 
     records = get_premium_history(code, start_date=start, end_date=end)
     return _json_response({
-        "data_enabled": True,
         "code": config.code,
         "name": config.name,
         "short_name": config.short_name,

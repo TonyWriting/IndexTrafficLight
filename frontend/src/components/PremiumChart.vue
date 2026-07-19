@@ -2,7 +2,7 @@
   <view class="chart-panel">
     <view class="chart-head">
       <view class="chart-title-block">
-        <text class="chart-title">溢价率走势</text>
+        <text class="chart-title">溢价率与收盘价</text>
       </view>
     </view>
 
@@ -17,6 +17,10 @@
           />
         </view>
         <text class="legend-text">溢价率</text>
+      </view>
+      <view class="legend-item">
+        <view class="legend-solid" :style="{ backgroundColor: CLOSE_LINE_COLOR }" />
+        <text class="legend-text">场内收盘价</text>
       </view>
     </view>
 
@@ -66,7 +70,7 @@
 // @ts-nocheck
 import { computed, getCurrentInstance, nextTick, onMounted, reactive, ref, watch } from 'vue'
 import type { PremiumRange, PremiumRecord, PremiumStats } from '../types'
-import { PREMIUM_STATUS_CONFIG, PremiumStatus } from '../types'
+import { CLOSE_LINE_COLOR, PREMIUM_LEVEL_LINE_COLORS, PremiumStatus } from '../types'
 import {
   filterByRange,
   formatPremiumRate,
@@ -91,48 +95,38 @@ const isDragging = ref(false)
 const BAND_DEFINITIONS = [
   {
     key: 'high',
-    label: PREMIUM_STATUS_CONFIG[PremiumStatus.EXTREME].label,
     lowerKey: 'p90',
     upperKey: null,
     fillColor: '#fee2e2',
-    lineColor: 'rgba(220, 38, 38, 0.82)',
-    labelColor: 'rgba(185, 28, 28, 0.62)',
+    lineColor: PREMIUM_LEVEL_LINE_COLORS[PremiumStatus.EXTREME],
   },
   {
     key: 'above',
-    label: PREMIUM_STATUS_CONFIG[PremiumStatus.ABOVE_NORMAL].label,
     lowerKey: 'p70',
     upperKey: 'p90',
     fillColor: '#ffedd5',
-    lineColor: 'rgba(234, 88, 12, 0.78)',
-    labelColor: 'rgba(194, 65, 12, 0.62)',
+    lineColor: PREMIUM_LEVEL_LINE_COLORS[PremiumStatus.ABOVE_NORMAL],
   },
   {
     key: 'normal',
-    label: PREMIUM_STATUS_CONFIG[PremiumStatus.NORMAL].label,
     lowerKey: 'p30',
     upperKey: 'p70',
     fillColor: '#fff7ed',
-    lineColor: 'rgba(217, 119, 6, 0.76)',
-    labelColor: 'rgba(180, 83, 9, 0.58)',
+    lineColor: PREMIUM_LEVEL_LINE_COLORS[PremiumStatus.NORMAL],
   },
   {
     key: 'below',
-    label: PREMIUM_STATUS_CONFIG[PremiumStatus.BELOW_NORMAL].label,
     lowerKey: 'p10',
     upperKey: 'p30',
     fillColor: '#ecfdf5',
-    lineColor: 'rgba(34, 197, 94, 0.78)',
-    labelColor: 'rgba(21, 128, 61, 0.62)',
+    lineColor: PREMIUM_LEVEL_LINE_COLORS[PremiumStatus.BELOW_NORMAL],
   },
   {
     key: 'low',
-    label: PREMIUM_STATUS_CONFIG[PremiumStatus.LOW].label,
     lowerKey: null,
     upperKey: 'p10',
     fillColor: '#dcfce7',
-    lineColor: 'rgba(16, 185, 129, 0.82)',
-    labelColor: 'rgba(4, 120, 87, 0.62)',
+    lineColor: PREMIUM_LEVEL_LINE_COLORS[PremiumStatus.LOW],
   },
 ] as const
 
@@ -164,12 +158,11 @@ let cache: {
   records: PremiumRecord[]
   rawValues: number[]
   values: number[]
+  closeValues: number[]
   bands: Array<{
     key: string
-    label: string
     fillColor: string
     lineColor: string
-    labelColor: string
     lower: number
     upper: number
   }>
@@ -177,6 +170,9 @@ let cache: {
   yMin: number
   yMax: number
   yRange: number
+  closeYMin: number
+  closeYMax: number
+  closeYRange: number
 } | null = null
 
 let meta = {
@@ -211,10 +207,8 @@ function createBands(yMin: number, yMax: number) {
       const upper = thresholdValue(definition.upperKey) ?? yMax
       return {
         key: definition.key,
-        label: definition.label,
         fillColor: definition.fillColor,
         lineColor: definition.lineColor,
-        labelColor: definition.labelColor,
         lower: Math.max(yMin, Math.min(yMax, lower)),
         upper: Math.max(yMin, Math.min(yMax, upper)),
       }
@@ -250,6 +244,7 @@ function prepare() {
 
   const rawValues = records.map((record) => record.premium_rate)
   const values = rawValues.map((value) => value * 100)
+  const closeValues = records.map((record) => record.close)
   const boundaries = ['p10', 'p30', 'p70', 'p90']
     .map(thresholdValue)
     .filter((value) => value != null)
@@ -264,15 +259,27 @@ function prepare() {
   const yMin = min - pad
   const yMax = max + pad
 
+  const closeMin = Math.min(...closeValues)
+  const closeMax = Math.max(...closeValues)
+  const closeSpan = closeMax - closeMin
+  const closeMagnitude = Math.max(Math.abs(closeMin), Math.abs(closeMax), 1)
+  const closePad = Math.max(closeSpan * 0.12, closeMagnitude * 0.01, 0.001)
+  const closeYMin = Math.max(0, closeMin - closePad)
+  const closeYMax = closeMax + closePad
+
   cache = {
     records,
     rawValues,
     values,
+    closeValues,
     bands: createBands(yMin, yMax),
     boundaries,
     yMin,
     yMax,
     yRange: max - min + pad * 2,
+    closeYMin,
+    closeYMax,
+    closeYRange: closeYMax - closeYMin,
   }
   hasChart.value = true
 }
@@ -335,17 +342,32 @@ function draw() {
     const ch = H - padT - padB
     meta = { padL, padR, padT, padB, cw, ch, W, H, left: rect.left || 0 }
 
-    const { records, values, bands, boundaries, yMin, yMax, yRange } = cache
+    const {
+      records,
+      values,
+      closeValues,
+      bands,
+      boundaries,
+      yMin,
+      yMax,
+      yRange,
+      closeYMin,
+      closeYMax,
+      closeYRange,
+    } = cache
     const toX = (index: number) => padL + (index / (values.length - 1)) * cw
-    const toY = (value: number) => padT + ch - ((value - yMin) / yRange) * ch
+    const toPremiumY = (value: number) => padT + ch - ((value - yMin) / yRange) * ch
+    const toCloseY = (value: number) => (
+      padT + ch - ((value - closeYMin) / closeYRange) * ch
+    )
 
     ctx.clearRect(0, 0, W, H)
     ctx.setFillStyle('#ffffff')
     ctx.fillRect(0, 0, W, H)
 
     bands.forEach((band) => {
-      const yTop = toY(band.upper)
-      const yBottom = toY(band.lower)
+      const yTop = toPremiumY(band.upper)
+      const yBottom = toPremiumY(band.lower)
       ctx.setFillStyle(band.fillColor)
       ctx.fillRect(padL, yTop - 1, cw, yBottom - yTop + 2)
     })
@@ -353,7 +375,7 @@ function draw() {
     ctx.setStrokeStyle('rgba(255, 255, 255, 0.42)')
     ctx.setLineWidth(1)
     boundaries.forEach((value) => {
-      const y = toY(value)
+      const y = toPremiumY(value)
       ctx.beginPath()
       ctx.moveTo(padL, y)
       ctx.lineTo(padL + cw, y)
@@ -370,6 +392,14 @@ function draw() {
       ctx.fillText(`${value.toFixed(1)}%`, padL - 6, y + 4)
     }
 
+    ctx.setFillStyle(CLOSE_LINE_COLOR)
+    ctx.setTextAlign('left')
+    for (let i = 0; i <= 4; i++) {
+      const y = padT + (i / 4) * ch
+      const value = closeYMax - (closeYRange * i) / 4
+      ctx.fillText(formatPrice(value), padL + cw + 6, y + 4)
+    }
+
     ctx.setStrokeStyle('#e2e8f0')
     ctx.setLineWidth(1)
     ctx.beginPath()
@@ -377,18 +407,9 @@ function draw() {
     ctx.lineTo(padL + cw, padT + ch)
     ctx.moveTo(padL, padT + ch)
     ctx.lineTo(padL, padT)
+    ctx.moveTo(padL + cw, padT + ch)
+    ctx.lineTo(padL + cw, padT)
     ctx.stroke()
-
-    ctx.setFontSize(12)
-    bands.forEach((band) => {
-      const yTop = toY(band.upper)
-      const yBottom = toY(band.lower)
-      const y = yTop + (yBottom - yTop) / 2
-      if (yBottom - yTop < 14) return
-      ctx.setFillStyle(band.labelColor)
-      ctx.setTextAlign('left')
-      ctx.fillText(band.label, padL + cw + 7, y + 4)
-    })
 
     ctx.setFillStyle('#64748b')
     ctx.setFontSize(11)
@@ -396,26 +417,33 @@ function draw() {
     ctx.fillText(records[0].date, padL + 2, H - 10)
     ctx.fillText(records[records.length - 1].date, padL + cw - 2, H - 10)
 
+    drawLine(ctx, closeValues, toX, toCloseY, CLOSE_LINE_COLOR, 1.5)
+
     bands.slice().reverse().forEach((band) => {
-      drawBandClippedLine(ctx, values, toX, toY, band, padL, cw)
+      drawBandClippedLine(ctx, values, toX, toPremiumY, band, padL, cw)
     })
 
     if (crossIdx >= 0 && crossIdx < values.length) {
       const x = toX(crossIdx)
-      const y = toY(values[crossIdx])
+      const premiumY = toPremiumY(values[crossIdx])
+      const closeY = toCloseY(closeValues[crossIdx])
       ctx.setStrokeStyle('rgba(51, 65, 85, 0.55)')
       ctx.setLineWidth(1)
       ctx.setLineDash([4, 3])
       ctx.beginPath()
       ctx.moveTo(x, padT)
       ctx.lineTo(x, padT + ch)
-      ctx.moveTo(padL, y)
-      ctx.lineTo(padL + cw, y)
       ctx.stroke()
       ctx.setLineDash([])
+
+      ctx.setFillStyle(CLOSE_LINE_COLOR)
+      ctx.beginPath()
+      ctx.arc(x, closeY, 3, 0, 2 * Math.PI)
+      ctx.fill()
+
       ctx.setFillStyle(lineColorForValue(values[crossIdx]))
       ctx.beginPath()
-      ctx.arc(x, y, 3, 0, 2 * Math.PI)
+      ctx.arc(x, premiumY, 3, 0, 2 * Math.PI)
       ctx.fill()
     }
 
@@ -541,7 +569,7 @@ onMounted(redrawLater)
 
 .legend-gradient {
   width: 34rpx;
-  height: 6rpx;
+  height: 5rpx;
   display: flex;
   overflow: hidden;
   border-radius: 4rpx;
@@ -550,6 +578,12 @@ onMounted(redrawLater)
 .legend-segment {
   flex: 1;
   height: 100%;
+}
+
+.legend-solid {
+  width: 34rpx;
+  height: 5rpx;
+  border-radius: 4rpx;
 }
 
 .legend-text {
