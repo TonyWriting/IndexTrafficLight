@@ -4,9 +4,9 @@
     @click="onClick"
   >
     <view class="card-top">
-      <view class="title-block">
+      <view class="card-title">
         <text class="fund-name" selectable>{{ name }}</text>
-        <text class="fund-code" selectable>{{ codeLine }}</text>
+        <text v-if="rating" class="fund-rating" selectable><text class="rating-separator">· </text>{{ rating }}</text>
       </view>
       <view class="status-badge" :style="{ backgroundColor: statusConfig.bgColor }">
         <text class="status-text" :style="{ color: statusConfig.color }" selectable>
@@ -14,10 +14,11 @@
         </text>
       </view>
     </view>
+    <text class="fund-code" selectable>{{ codeLine }}</text>
 
     <view class="primary-row">
       <view class="premium-block">
-        <text class="metric-label">当前溢价率</text>
+        <text class="metric-label">溢价率</text>
         <text class="premium-value" :style="{ color: statusConfig.color }" selectable>
           {{ formatPremiumRate(latest?.premium_rate) }}
         </text>
@@ -33,12 +34,14 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import type { DashboardLatestRecord, PremiumStatus } from '../types'
+import type { FundRating } from '../config/etfDisplay'
 import { PREMIUM_STATUS_CONFIG } from '../types'
 import { formatPremiumRate, formatShortDate } from '../utils/premium'
 
 const props = defineProps<{
   code: string
   name: string
+  rating?: FundRating | null
   latest: DashboardLatestRecord | null
   percentile: number
   status: PremiumStatus
@@ -77,36 +80,67 @@ function onClick() {
 
 .card-top {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   justify-content: space-between;
   gap: 20rpx;
 }
 
-.title-block {
-  min-width: 0;
-  flex: 1;
-}
-
 .fund-name {
   display: block;
+  min-width: 0;
+  flex: 0 1 auto;
   color: #0f172a;
   font-size: 32rpx;
   font-weight: 700;
   line-height: 42rpx;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .fund-code {
   display: block;
   margin-top: 4rpx;
+}
+
+.fund-code,
+.fund-rating {
   color: #64748b;
   font-size: 22rpx;
   line-height: 30rpx;
 }
 
-.status-badge {
+.fund-rating {
   flex-shrink: 0;
+  white-space: nowrap;
+  color: rgba(91, 33, 182, 0.75);
+  font-weight: 600;
+}
+
+.rating-separator {
+  color: #64748b;
+  font-weight: 400;
+}
+
+.card-title {
+  display: flex;
+  align-items: baseline;
+  gap: 8rpx;
+  min-width: 0;
+  flex: 1;
+}
+
+.status-badge {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  box-sizing: border-box;
+  height: 44rpx;
+  padding: 0 14rpx;
+  border: 1rpx solid transparent;
   border-radius: 8rpx;
-  padding: 8rpx 14rpx;
+  white-space: nowrap;
 }
 
 .status-text {

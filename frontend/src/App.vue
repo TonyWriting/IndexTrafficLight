@@ -11,11 +11,9 @@ text {
 }
 
 canvas,
-.refresh-btn,
 .state-action,
 .range-tab,
 .status-badge,
-.open-text,
 .tip-close {
   -webkit-user-select: none;
   user-select: none;

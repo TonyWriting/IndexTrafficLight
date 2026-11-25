@@ -5,16 +5,15 @@ from __future__ import annotations
 from calendar import monthrange
 from datetime import date, datetime, timedelta, timezone
 from math import isfinite
-from collections.abc import Callable
 from typing import Any
 
-from .config import TRACKED_ETFS
+from .config import DASHBOARD_GROUP_ORDER, TRACKED_ETFS
 from .storage import get_premium_history
 
 RANGES = {
     "3m": 3,
+    "6m": 6,
     "1y": 12,
-    "3y": 36,
 }
 
 STATUS_LOW = 1
@@ -39,10 +38,11 @@ def _premium_record(record: dict) -> dict | None:
 
     close = record.get("close")
     nav = record.get("nav")
+    iopv = record.get("iopv")
     premium_rate = record.get("premium_rate")
     if not (
         _finite_number(close)
-        and _finite_number(nav)
+        and _finite_number(iopv if iopv is not None else nav)
         and _finite_number(premium_rate)
     ):
         return None
@@ -50,7 +50,10 @@ def _premium_record(record: dict) -> dict | None:
     return {
         "date": record["date"],
         "close": float(close),
-        "nav": float(nav),
+        "nav": float(nav) if nav is not None else None,
+        "iopv": float(iopv) if iopv is not None else None,
+        "nav_date": record["nav_date"],
+        "premium_basis": record["premium_basis"],
         "premium_rate": float(premium_rate),
     }
 
@@ -158,18 +161,27 @@ def _group_ranges(items: list[dict]) -> dict[str, dict]:
     return ranges
 
 
-def build_dashboard_snapshot(
-    on_etf_start: Callable[[str, str], None] | None = None,
-) -> dict:
+def _ordered_group_keys(group_order: list[str]) -> list[str]:
+    configured = [
+        key
+        for key in DASHBOARD_GROUP_ORDER
+        if key in group_order
+    ]
+    configured_set = set(configured)
+    return configured + [
+        key
+        for key in group_order
+        if key not in configured_set
+    ]
+
+
+def build_dashboard_snapshot() -> dict:
     """Build the full dashboard payload from stored premium history."""
     items = []
     groups_by_key: dict[str, dict] = {}
     group_order: list[str] = []
 
     for config in TRACKED_ETFS.values():
-        if on_etf_start:
-            on_etf_start(config.code, config.name)
-
         records = normalize_records(get_premium_history(config.code))
         stats = {
             range_key: summarize_premium(records, range_key)
@@ -179,6 +191,7 @@ def build_dashboard_snapshot(
             "code": config.code,
             "name": config.name,
             "short_name": config.short_name,
+            "fund_type": config.fund_type,
             "stats": stats,
         }
         items.append(item)
@@ -208,11 +221,10 @@ def build_dashboard_snapshot(
         group["ranges"] = _group_ranges(group_items)
 
     return {
-        "version": "v3",
         "generated_at_bj": _beijing_now(),
         "items": items,
         "groups": [
             groups_by_key[key]
-            for key in group_order
+            for key in _ordered_group_keys(group_order)
         ],
     }

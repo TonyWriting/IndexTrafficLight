@@ -45,10 +45,6 @@
         <cover-view class="tip-label">场内收盘价</cover-view>
         <cover-view class="tip-value">{{ tip.close }}</cover-view>
       </cover-view>
-      <cover-view class="tip-row">
-        <cover-view class="tip-label">基金净值 NAV</cover-view>
-        <cover-view class="tip-value">{{ tip.nav }}</cover-view>
-      </cover-view>
     </cover-view>
 
     <canvas
@@ -67,7 +63,6 @@
 </template>
 
 <script setup lang="ts">
-// @ts-nocheck
 import { computed, getCurrentInstance, nextTick, onMounted, reactive, ref, watch } from 'vue'
 import type { PremiumRange, PremiumRecord, PremiumStats } from '../types'
 import { CLOSE_LINE_COLOR, PREMIUM_LEVEL_LINE_COLORS, PremiumStatus } from '../types'
@@ -138,7 +133,6 @@ const tip = reactive({
   premium: '',
   percentile: '',
   close: '',
-  nav: '',
   x: 0,
   w: 0,
 })
@@ -171,30 +165,26 @@ let cache: {
   yMax: number
   yRange: number
   closeYMin: number
-  closeYMax: number
   closeYRange: number
 } | null = null
 
 let meta = {
-  padL: 42,
-  padR: 24,
-  padT: 16,
-  padB: 34,
+  padL: 34,
   cw: 0,
-  ch: 0,
   W: 0,
-  H: 0,
   left: 0,
 }
 
 let crossIdx = -1
 
-function statValue(key: string): number | null {
+type PercentileKey = 'p10' | 'p30' | 'p70' | 'p90'
+
+function statValue(key: PercentileKey): number | null {
   const value = props.stats[key]
   return typeof value === 'number' && Number.isFinite(value) ? value : null
 }
 
-function thresholdValue(key: string | null): number | null {
+function thresholdValue(key: PercentileKey | null): number | null {
   if (!key) return null
   const value = statValue(key)
   return value == null ? null : value * 100
@@ -245,9 +235,9 @@ function prepare() {
   const rawValues = records.map((record) => record.premium_rate)
   const values = rawValues.map((value) => value * 100)
   const closeValues = records.map((record) => record.close)
-  const boundaries = ['p10', 'p30', 'p70', 'p90']
+  const boundaries = (['p10', 'p30', 'p70', 'p90'] as const)
     .map(thresholdValue)
-    .filter((value) => value != null)
+    .filter((value): value is number => value != null)
 
   // Scale the Y axis to the data and percentile bands only. Forcing 0 into the
   // range would push the whole curve to one edge and inflate the outermost band
@@ -278,7 +268,6 @@ function prepare() {
     yMax,
     yRange: max - min + pad * 2,
     closeYMin,
-    closeYMax,
     closeYRange: closeYMax - closeYMin,
   }
   hasChart.value = true
@@ -334,13 +323,13 @@ function draw() {
 
     const W = rect.width
     const H = rect.height
-    const padL = 46
-    const padR = 46
+    const padL = 34
+    const padR = 12
     const padT = 18
     const padB = 36
     const cw = W - padL - padR
     const ch = H - padT - padB
-    meta = { padL, padR, padT, padB, cw, ch, W, H, left: rect.left || 0 }
+    meta = { padL, cw, W, left: rect.left || 0 }
 
     const {
       records,
@@ -352,7 +341,6 @@ function draw() {
       yMax,
       yRange,
       closeYMin,
-      closeYMax,
       closeYRange,
     } = cache
     const toX = (index: number) => padL + (index / (values.length - 1)) * cw
@@ -386,18 +374,9 @@ function draw() {
     ctx.setFontSize(11)
     ctx.setTextAlign('right')
 
-    for (let i = 0; i <= 4; i++) {
-      const y = padT + (i / 4) * ch
-      const value = yMax - (yRange * i) / 4
-      ctx.fillText(`${value.toFixed(1)}%`, padL - 6, y + 4)
-    }
-
-    ctx.setFillStyle(CLOSE_LINE_COLOR)
-    ctx.setTextAlign('left')
-    for (let i = 0; i <= 4; i++) {
-      const y = padT + (i / 4) * ch
-      const value = closeYMax - (closeYRange * i) / 4
-      ctx.fillText(formatPrice(value), padL + cw + 6, y + 4)
+    const tickStep = Math.max(1, Math.ceil(yRange / 4))
+    for (let value = Math.floor(yMax / tickStep) * tickStep; value >= yMin; value -= tickStep) {
+      ctx.fillText(`${value}%`, padL - 6, toPremiumY(value) + 4)
     }
 
     ctx.setStrokeStyle('#e2e8f0')
@@ -415,6 +394,7 @@ function draw() {
     ctx.setFontSize(11)
     ctx.setTextAlign('center')
     ctx.fillText(records[0].date, padL + 2, H - 10)
+    ctx.setTextAlign('right')
     ctx.fillText(records[records.length - 1].date, padL + cw - 2, H - 10)
 
     drawLine(ctx, closeValues, toX, toCloseY, CLOSE_LINE_COLOR, 1.5)
@@ -429,12 +409,12 @@ function draw() {
       const closeY = toCloseY(closeValues[crossIdx])
       ctx.setStrokeStyle('rgba(51, 65, 85, 0.55)')
       ctx.setLineWidth(1)
-      ctx.setLineDash([4, 3])
+      ctx.setLineDash([4, 3], 0)
       ctx.beginPath()
       ctx.moveTo(x, padT)
       ctx.lineTo(x, padT + ch)
       ctx.stroke()
-      ctx.setLineDash([])
+      ctx.setLineDash([], 0)
 
       ctx.setFillStyle(CLOSE_LINE_COLOR)
       ctx.beginPath()
@@ -472,7 +452,6 @@ function handleInput(event: any) {
   tip.premium = formatPremiumRate(record.premium_rate)
   tip.percentile = formatPercentileAsP(percentileRank(record.premium_rate, cache.rawValues))
   tip.close = formatPrice(record.close)
-  tip.nav = formatPrice(record.nav)
   tip.x = x
   tip.w = meta.W
   crossIdx = index
@@ -544,14 +523,6 @@ onMounted(redrawLater)
   font-size: 30rpx;
   font-weight: 800;
   line-height: 38rpx;
-}
-
-.chart-subtitle {
-  display: block;
-  margin-top: 4rpx;
-  color: #64748b;
-  font-size: 22rpx;
-  line-height: 30rpx;
 }
 
 .legend-row {

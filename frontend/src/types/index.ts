@@ -1,14 +1,20 @@
 export interface PremiumRecord {
   date: string
   close: number
-  nav: number
+  nav: number | null
+  nav_date: string | null
+  iopv: number | null
+  premium_basis: 'iopv' | 'nav_proxy_iopv'
   premium_rate: number
 }
+
+export type FundType = 'etf' | 'lof'
 
 export interface EtfInfo {
   code: string
   name: string
   short_name: string
+  fund_type: FundType
   tracking_index: string
   tracking_index_name: string
   latest: PremiumRecord | null
@@ -18,11 +24,12 @@ export interface EtfPremiumHistory {
   code: string
   name: string
   short_name: string
+  fund_type: FundType
   count: number
   data: PremiumRecord[]
 }
 
-export type PremiumRange = '3m' | '1y' | '3y'
+export type PremiumRange = '3m' | '6m' | '1y'
 
 export interface RangeOption {
   value: PremiumRange
@@ -31,8 +38,8 @@ export interface RangeOption {
 
 export const RANGE_OPTIONS: RangeOption[] = [
   { value: '3m', label: '近3月' },
+  { value: '6m', label: '近半年' },
   { value: '1y', label: '近1年' },
-  { value: '3y', label: '近3年' },
 ]
 
 export enum PremiumStatus {
@@ -102,8 +109,6 @@ export interface PremiumStats {
   p30: number | null
   p70: number | null
   p90: number | null
-  min: number | null
-  max: number | null
 }
 
 export interface DashboardRangeSummary {
@@ -126,6 +131,7 @@ export interface DashboardItem {
   code: string
   name: string
   short_name: string
+  fund_type: FundType
   stats: Record<PremiumRange, DashboardStats>
 }
 
@@ -141,13 +147,4 @@ export interface DashboardSnapshot {
   groups: DashboardGroup[]
 }
 
-export const PREMIUM_LINE_COLOR = '#2563eb'
 export const CLOSE_LINE_COLOR = '#64748b'
-
-export const PERCENTILE_LINE_CONFIG = [
-  { key: 'p90', label: 'P90', color: '#dc2626' },
-  { key: 'p70', label: 'P70', color: '#ea580c' },
-  { key: 'median', label: 'P50', color: '#ca8a04' },
-  { key: 'p30', label: 'P30', color: '#16a34a' },
-  { key: 'p10', label: 'P10', color: '#059669' },
-] as const

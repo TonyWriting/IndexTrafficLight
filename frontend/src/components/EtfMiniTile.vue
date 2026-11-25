@@ -2,7 +2,10 @@
   <view class="etf-mini-tile" @click="onClick">
     <view class="tile-head">
       <view class="tile-title-row">
-        <text class="tile-name" selectable>{{ name }}</text>
+        <view class="tile-title">
+          <text class="tile-name" selectable>{{ name }}</text>
+          <text v-if="rating" class="tile-rating" selectable><text class="rating-separator">· </text>{{ rating }}</text>
+        </view>
         <view class="tile-badge" :style="{ backgroundColor: statusConfig.bgColor }">
           <text class="tile-badge-text" :style="{ color: statusConfig.color }" selectable>
             {{ statusConfig.label }}
@@ -23,12 +26,14 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import type { DashboardLatestRecord, PremiumStatus } from '../types'
+import type { FundRating } from '../config/etfDisplay'
 import { PREMIUM_STATUS_CONFIG } from '../types'
 import { formatPremiumRate, formatShortDate } from '../utils/premium'
 
 const props = defineProps<{
   code: string
   name: string
+  rating?: FundRating | null
   latest: DashboardLatestRecord | null
   percentile: number
   status: PremiumStatus
@@ -81,7 +86,7 @@ function onClick() {
 }
 
 .tile-name {
-  flex: 1;
+  flex: 0 1 auto;
   min-width: 0;
   color: #0f172a;
   font-size: 24rpx;
@@ -92,10 +97,25 @@ function onClick() {
   white-space: nowrap;
 }
 
+.tile-title {
+  display: flex;
+  align-items: baseline;
+  gap: 8rpx;
+  min-width: 0;
+  flex: 1;
+}
+
 .tile-badge {
+  display: flex;
+  align-items: center;
+  justify-content: center;
   flex-shrink: 0;
+  box-sizing: border-box;
+  height: 32rpx;
+  padding: 0 8rpx;
+  border: 1rpx solid transparent;
   border-radius: 6rpx;
-  padding: 2rpx 10rpx;
+  white-space: nowrap;
 }
 
 .tile-badge-text {
@@ -104,10 +124,23 @@ function onClick() {
   line-height: 26rpx;
 }
 
-.tile-code {
+.tile-code,
+.tile-rating {
   color: #64748b;
   font-size: 20rpx;
   line-height: 26rpx;
+}
+
+.tile-rating {
+  flex-shrink: 0;
+  white-space: nowrap;
+  color: rgba(91, 33, 182, 0.75);
+  font-weight: 600;
+}
+
+.rating-separator {
+  color: #64748b;
+  font-weight: 400;
 }
 
 .tile-stats {

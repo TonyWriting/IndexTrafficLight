@@ -16,9 +16,9 @@ import { summarizePremium } from '../utils/premium'
 const BASE_URL = import.meta.env.VITE_API_BASE_URL || ''
 const MOCK_MODE = import.meta.env.VITE_USE_MOCK
 const USE_MOCK = MOCK_MODE === 'true' || (MOCK_MODE !== 'false' && !BASE_URL)
-const DISABLE_CACHE = import.meta.env.VITE_DISABLE_CACHE === 'true'
+const DISABLE_CACHE = import.meta.env.VITE_DISABLE_CACHE !== 'false'
 
-const CACHE_VERSION = 'v20'
+const CACHE_VERSION = 'iopv_first_4'
 const CACHE_KEYS = {
   dashboard: `cache_dashboard_${CACHE_VERSION}`,
   historyPrefix: `cache_etf_premium_history_${CACHE_VERSION}_`,
@@ -38,10 +38,9 @@ export const PREMIUM_CACHE_UPDATED_EVENT = 'premium-cache-updated'
 
 let staleCacheCleared = false
 let autoRefreshTimer: ReturnType<typeof setInterval> | null = null
-let warmupPromise: Promise<void> | null = null
-let refreshAllPromise: Promise<void> | null = null
 let historyPrefetchTimer: ReturnType<typeof setTimeout> | null = null
 let activeHistoryPrefetchCount = 0
+let historyGeneration = 0
 const inFlight = new Map<string, Promise<unknown>>()
 const historyPrefetchQueue: string[] = []
 const queuedHistoryCodes = new Set<string>()
@@ -65,18 +64,20 @@ function request<T>(url: string): Promise<T> {
 
 function mockHistoryFor(code: string): EtfPremiumHistory {
   const all = mockPremiumHistory as Record<string, EtfPremiumHistory>
+  const info = (mockEtfs as EtfInfo[]).find((item) => item.code === code)
   return all[code] || {
     code,
     name: code,
     short_name: code,
+    fund_type: info?.fund_type ?? 'etf',
     count: 0,
     data: [],
   }
 }
 
-function emitCacheUpdated(): void {
+function emitCacheUpdated(snapshot: DashboardSnapshot): void {
   try {
-    uni.$emit(PREMIUM_CACHE_UPDATED_EVENT)
+    uni.$emit(PREMIUM_CACHE_UPDATED_EVENT, snapshot)
   } catch {
     // Ignore event errors in non-UI contexts.
   }
@@ -90,7 +91,9 @@ function clearStaleCacheOnce(): void {
   if (staleCacheCleared) return
   staleCacheCleared = true
 
-  clearCacheKeys((key) => STALE_CACHE_MATCHERS.some((matches) => matches(key)))
+  clearCacheKeys((key) => DISABLE_CACHE
+    ? key.startsWith('cache_dashboard_') || key.startsWith('cache_etf_premium_history_')
+    : STALE_CACHE_MATCHERS.some((matches) => matches(key)))
 }
 
 function singleFlight<T>(key: string, task: () => Promise<T>): Promise<T> {
@@ -106,7 +109,7 @@ function singleFlight<T>(key: string, task: () => Promise<T>): Promise<T> {
 }
 
 function historyRequestKey(code: string): string {
-  return `history:${code}`
+  return `history:${historyGeneration}:${code}`
 }
 
 function historyCacheKey(code: string): string {
@@ -123,11 +126,20 @@ function setHistoryCache(code: string, data: EtfPremiumHistory): void {
 }
 
 function fetchHistoryFromNetwork(code: string): Promise<EtfPremiumHistory> {
+  const generation = historyGeneration
   return singleFlight(historyRequestKey(code), async () => {
     const data = await request<EtfPremiumHistory>(`/api/etfs/history?code=${encodeURIComponent(code)}`)
+    // A dashboard refresh may invalidate a history request that is still running.
+    if (generation !== historyGeneration) return fetchHistoryFromNetwork(code)
     setHistoryCache(code, data)
     return data
   })
+}
+
+function invalidateHistoryCache(): void {
+  historyGeneration += 1
+  clearHistoryPrefetchQueue()
+  clearCacheKeys((key) => key.startsWith(CACHE_KEYS.historyPrefix))
 }
 
 function removeQueuedHistoryCode(code: string): void {
@@ -256,6 +268,7 @@ function buildMockDashboard(): DashboardSnapshot {
       code: info.code,
       name: history.name || info.name,
       short_name: history.short_name || info.short_name,
+      fund_type: history.fund_type || info.fund_type,
       stats,
     }
   })
@@ -308,8 +321,10 @@ export async function fetchDashboard(forceRefresh = false): Promise<DashboardSna
 
   return singleFlight('dashboard', async () => {
     const data = await request<DashboardSnapshot>('/api/dashboard')
+    invalidateHistoryCache()
     if (!DISABLE_CACHE) setCache(CACHE_KEYS.dashboard, data)
     enqueueDashboardHistoryPrefetch(data)
+    emitCacheUpdated(data)
     return data
   }).catch(() => {
     throw new Error('首页数据加载失败')
@@ -321,7 +336,7 @@ export async function fetchPremiumHistory(
   forceRefresh = false,
 ): Promise<EtfPremiumHistory> {
   const normalizedCode = code.trim()
-  if (!normalizedCode) throw new Error('ETF 代码无效')
+  if (!normalizedCode) throw new Error('基金代码无效')
 
   if (USE_MOCK) return mockHistoryFor(normalizedCode)
   clearStaleCacheOnce()
@@ -338,73 +353,23 @@ export async function fetchPremiumHistory(
   })
 }
 
-export function getCachedDashboardSnapshot(): DashboardSnapshot | null {
-  if (USE_MOCK) return buildMockDashboard()
-  clearStaleCacheOnce()
-  if (DISABLE_CACHE) return null
-
-  const cached = getCache<DashboardSnapshot>(CACHE_KEYS.dashboard)
-  if (cached) enqueueDashboardHistoryPrefetch(cached)
-  return cached
-}
-
-export function getCachedPremiumHistory(code: string): EtfPremiumHistory | null {
-  const normalizedCode = code.trim()
-  if (!normalizedCode || USE_MOCK) return USE_MOCK ? mockHistoryFor(normalizedCode) : null
-  clearStaleCacheOnce()
-  return getCachedHistory(normalizedCode)
-}
-
 export async function fetchReviewMode(): Promise<boolean> {
   if (USE_MOCK) return false
 
   return singleFlight('review-mode', async () => {
-    const data = await request<{ review_mode?: boolean | number }>('/api/review-mode')
-    const value = data?.review_mode
-    return value === true || value === 1
+    const data = await request<{ review_mode: boolean }>('/api/review-mode')
+    return data.review_mode === true
   }).catch(() => false)
-}
-
-export function warmPremiumCache(): void {
-  if (USE_MOCK || warmupPromise) return
-
-  warmupPromise = (async () => {
-    await fetchDashboard(false)
-    emitCacheUpdated()
-  })()
-    .catch((err) => {
-      logBackgroundError('Failed to warm ETF premium cache', err)
-    })
-    .finally(() => {
-      warmupPromise = null
-    })
-}
-
-export async function refreshAllPremiumData(): Promise<void> {
-  if (USE_MOCK) return
-  if (refreshAllPromise) return refreshAllPromise
-
-  refreshAllPromise = (async () => {
-    await fetchDashboard(true)
-    emitCacheUpdated()
-  })()
-    .catch((err) => {
-      logBackgroundError('Failed to refresh ETF premium cache', err)
-    })
-    .finally(() => {
-      refreshAllPromise = null
-    })
-
-  return refreshAllPromise
 }
 
 export function startPremiumAutoRefresh(): void {
   if (USE_MOCK) return
-  warmPremiumCache()
 
   if (autoRefreshTimer) return
   autoRefreshTimer = setInterval(() => {
-    void refreshAllPremiumData()
+    void fetchDashboard(true).catch((err) => {
+      logBackgroundError('Failed to refresh ETF premium cache', err)
+    })
   }, AUTO_REFRESH_INTERVAL_MS)
 }
 

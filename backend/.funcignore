@@ -1,0 +1,5 @@
+local.settings.json
+reports/
+tests/
+__pycache__/
+shared/__pycache__/

@@ -119,14 +119,18 @@
           :max-premium="group.max_premium"
           :min-status="group.min_status"
           :max-status="group.max_status"
+          :collapsible="group.members.length > 2"
+          :expanded="group.expanded"
+          @toggle="toggleGroup(group.tracking_index)"
         />
-        <view class="group-body">
+        <view v-if="group.expanded" class="group-body">
           <view v-if="group.members.length >= 2" class="tile-grid">
             <EtfMiniTile
               v-for="item in group.members"
               :key="item.code"
               :code="item.code"
               :name="item.displayName"
+              :rating="item.rating"
               :latest="item.stats.latest"
               :percentile="item.stats.percentile"
               :status="item.stats.status"
@@ -139,6 +143,7 @@
             :key="item.code"
             :code="item.code"
             :name="item.displayName"
+            :rating="item.rating"
             :latest="item.stats.latest"
             :percentile="item.stats.percentile"
             :status="item.stats.status"
@@ -152,24 +157,27 @@
 
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref } from 'vue'
-import { onPullDownRefresh, onShareAppMessage, onShareTimeline } from '@dcloudio/uni-app'
+import { onHide, onPullDownRefresh, onShareAppMessage, onShareTimeline, onShow, onUnload } from '@dcloudio/uni-app'
 import EtfCard from '../../components/EtfCard.vue'
 import EtfGroupHeader from '../../components/EtfGroupHeader.vue'
 import EtfMiniTile from '../../components/EtfMiniTile.vue'
 import {
   fetchDashboard,
   fetchReviewMode,
-  getCachedDashboardSnapshot,
   PREMIUM_CACHE_UPDATED_EVENT,
   startPremiumAutoRefresh,
   stopPremiumAutoRefresh,
 } from '../../api'
 import type { DashboardSnapshot, DashboardStats, PremiumRange, PremiumStatus } from '../../types'
 import { RANGE_OPTIONS } from '../../types'
+import { ETF_DISPLAY } from '../../config/etfDisplay'
+import type { FundRating } from '../../config/etfDisplay'
 
 interface DashboardItem {
   code: string
   displayName: string
+  rating: FundRating | null
+  order: number
   stats: DashboardStats
 }
 
@@ -177,6 +185,7 @@ interface DashboardGroup {
   tracking_index: string
   tracking_index_name: string
   members: DashboardItem[]
+  expanded: boolean
   min_premium: number | null
   max_premium: number | null
   min_status: PremiumStatus | null
@@ -194,6 +203,12 @@ const loading = ref(true)
 const error = ref('')
 const dashboard = ref<DashboardSnapshot | null>(null)
 const selectedRange = ref<PremiumRange>('3m')
+const expandedGroups = ref<Record<string, boolean>>({})
+let pageVisible = false
+
+function toggleGroup(trackingIndex: string) {
+  expandedGroups.value[trackingIndex] = !expandedGroups.value[trackingIndex]
+}
 
 const currentValue = ref('82')
 const baseValue = ref('75')
@@ -217,25 +232,24 @@ const dashboardGroups = computed<DashboardGroup[]>(() => {
         .filter((item): item is NonNullable<typeof item> => !!item)
         .map((item) => ({
           code: item.code,
-          displayName: item.short_name || item.name || item.code,
+          displayName: ETF_DISPLAY[item.code]?.companyName || item.short_name || item.name || item.code,
+          rating: ETF_DISPLAY[item.code]?.rating ?? null,
+          order: ETF_DISPLAY[item.code]?.order ?? Number.POSITIVE_INFINITY,
           stats: item.stats[selectedRange.value],
         }))
         .filter((item) => item.stats.latest)
 
-      members.sort((a, b) => {
-        const pa = a.stats.latest?.premium_rate ?? Number.POSITIVE_INFINITY
-        const pb = b.stats.latest?.premium_rate ?? Number.POSITIVE_INFINITY
-        return pa - pb
-      })
+      members.sort((a, b) => a.order - b.order || a.code.localeCompare(b.code))
 
       const range = group.ranges[selectedRange.value]
-      const minMember = members[0]
-      const maxMember = members[members.length - 1]
+      const minMember = members.find((item) => item.stats.latest?.premium_rate === range.min_premium)
+      const maxMember = members.find((item) => item.stats.latest?.premium_rate === range.max_premium)
 
       return {
         tracking_index: group.tracking_index,
         tracking_index_name: group.tracking_index_name,
         members,
+        expanded: members.length <= 2 || expandedGroups.value[group.tracking_index] === true,
         min_premium: range.min_premium,
         max_premium: range.max_premium,
         min_status: minMember?.stats.status ?? null,
@@ -253,21 +267,13 @@ const resultTone = computed(() => toneForDeviation(deviation.value))
 const statusLabel = computed(() => statusForDeviation(deviation.value))
 
 async function initializePage(): Promise<void> {
-  const cached = getCachedDashboardSnapshot()
-  if (cached) {
-    showDashboard(cached)
-    return
-  }
-
   const reviewMode = await fetchReviewMode()
   if (reviewMode) {
     showCalculator()
     return
   }
 
-  if (await loadData(false)) {
-    startPremiumAutoRefresh()
-  }
+  await loadData(false, dashboard.value !== null)
 }
 
 function showDashboard(snapshot: DashboardSnapshot): void {
@@ -275,16 +281,20 @@ function showDashboard(snapshot: DashboardSnapshot): void {
   dashboard.value = snapshot
   loading.value = false
   error.value = ''
-  uni.setNavigationBarTitle({ title: 'QDII ETF 溢价灯' })
-  startPremiumAutoRefresh()
+  if (pageVisible) {
+    uni.setNavigationBarTitle({ title: 'QDII 场内基金溢价灯' })
+    startPremiumAutoRefresh()
+  }
 }
 
 function showCalculator(): void {
   viewMode.value = 'calculator'
   loading.value = false
   error.value = ''
-  stopPremiumAutoRefresh()
-  uni.setNavigationBarTitle({ title: '偏离率计算器' })
+  if (pageVisible) {
+    stopPremiumAutoRefresh()
+    uni.setNavigationBarTitle({ title: '偏离率计算器' })
+  }
 }
 
 async function loadData(forceRefresh = false, silent = false): Promise<boolean> {
@@ -295,10 +305,7 @@ async function loadData(forceRefresh = false, silent = false): Promise<boolean> 
 
   try {
     const data = await fetchDashboard(forceRefresh)
-    dashboard.value = data
-    viewMode.value = 'dashboard'
-    uni.setNavigationBarTitle({ title: 'QDII ETF 溢价灯' })
-    error.value = ''
+    showDashboard(data)
     return true
   } catch (err: any) {
     if (!silent) {
@@ -316,9 +323,10 @@ function openDetail(code: string) {
   uni.navigateTo({ url: `/pages/detail/detail?code=${encodeURIComponent(code)}` })
 }
 
-function handlePremiumCacheUpdated() {
-  if (!loading.value && viewMode.value === 'dashboard') {
-    void loadData(false, true)
+function handlePremiumCacheUpdated(snapshot: DashboardSnapshot) {
+  if (viewMode.value === 'dashboard') {
+    dashboard.value = snapshot
+    error.value = ''
   }
 }
 
@@ -376,13 +384,25 @@ function onBaseInput(event: any): void {
 
 onMounted(() => {
   uni.$on(PREMIUM_CACHE_UPDATED_EVENT, handlePremiumCacheUpdated)
-  void initializePage()
 })
 
 onUnmounted(() => {
   uni.$off(PREMIUM_CACHE_UPDATED_EVENT, handlePremiumCacheUpdated)
-  stopPremiumAutoRefresh()
 })
+
+onShow(() => {
+  pageVisible = true
+  void initializePage()
+})
+
+function stopPageRefresh(): void {
+  if (!pageVisible) return
+  pageVisible = false
+  stopPremiumAutoRefresh()
+}
+
+onHide(stopPageRefresh)
+onUnload(stopPageRefresh)
 
 onPullDownRefresh(async () => {
   if (viewMode.value === 'dashboard') {
@@ -394,14 +414,14 @@ onPullDownRefresh(async () => {
 onShareAppMessage(() => ({
   title: viewMode.value === 'calculator'
     ? '偏离率计算器'
-    : 'QDII ETF 溢价灯 · 盘后看场内价格贵不贵',
+    : 'QDII 场内基金溢价灯 · 盘后看场内价格贵不贵',
   path: '/pages/index/index',
 }))
 
 onShareTimeline(() => ({
   title: viewMode.value === 'calculator'
     ? '偏离率计算器'
-    : 'QDII ETF 溢价灯 · 盘后看场内价格贵不贵',
+    : 'QDII 场内基金溢价灯 · 盘后看场内价格贵不贵',
 }))
 </script>
 

@@ -3,8 +3,8 @@ import { PremiumStatus } from '../types'
 
 const RANGE_MONTHS: Record<PremiumRange, number> = {
   '3m': 3,
+  '6m': 6,
   '1y': 12,
-  '3y': 36,
 }
 
 function isFiniteNumber(value: unknown): value is number {
@@ -28,12 +28,12 @@ function shiftMonth(dateStr: string, months: number): string {
   ].join('-')
 }
 
-export function normalizeRecords(records: PremiumRecord[]): PremiumRecord[] {
+function normalizeRecords(records: PremiumRecord[]): PremiumRecord[] {
   return records
     .filter((record) => (
       !!record.date
       && isFiniteNumber(record.close)
-      && isFiniteNumber(record.nav)
+      && isFiniteNumber(record.iopv ?? record.nav)
       && isFiniteNumber(record.premium_rate)
     ))
     .slice()
@@ -52,7 +52,7 @@ export function filterByRange(
   return sorted.filter((record) => record.date >= cutoff)
 }
 
-export function quantile(values: number[], q: number): number | null {
+function quantile(values: number[], q: number): number | null {
   const sorted = values
     .filter(isFiniteNumber)
     .slice()
@@ -78,7 +78,7 @@ export function percentileRank(current: number, values: number[]): number {
   return Math.max(0, Math.min(1, countBelowOrEqual / clean.length))
 }
 
-export function determinePremiumStatus(percentile: number): PremiumStatus {
+function determinePremiumStatus(percentile: number): PremiumStatus {
   if (percentile >= 0.9) return PremiumStatus.EXTREME
   if (percentile >= 0.7) return PremiumStatus.ABOVE_NORMAL
   if (percentile >= 0.3) return PremiumStatus.NORMAL
@@ -106,8 +106,6 @@ export function summarizePremium(
       p30: null,
       p70: null,
       p90: null,
-      min: null,
-      max: null,
     }
   }
 
@@ -125,8 +123,6 @@ export function summarizePremium(
     p30: quantile(values, 0.3),
     p70: quantile(values, 0.7),
     p90: quantile(values, 0.9),
-    min: Math.min(...values),
-    max: Math.max(...values),
   }
 }
 
@@ -135,11 +131,6 @@ export function formatPremiumRate(value: number | null | undefined, digits = 2):
   const pct = value * 100
   const sign = pct > 0 ? '+' : ''
   return `${sign}${pct.toFixed(digits)}%`
-}
-
-export function formatPercentile(value: number | null | undefined): string {
-  if (!isFiniteNumber(value)) return '--'
-  return `${(value * 100).toFixed(1)}%`
 }
 
 export function formatPrice(value: number | null | undefined, digits = 3): string {

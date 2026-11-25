@@ -1,10 +1,22 @@
 <template>
-  <view class="group-header">
-    <view class="title-row">
-      <text class="index-name" selectable>{{ trackingIndexName }}</text>
+  <view class="group-header" :class="{ collapsed: collapsible && !expanded }">
+    <view class="title-row" :class="{ collapsible }" @click="toggle">
+      <text class="index-name">{{ trackingIndexName }}</text>
       <text class="member-count">{{ memberCount }} 只</text>
+      <view
+        v-if="collapsible"
+        class="collapse-toggle"
+        role="button"
+        tabindex="0"
+        :aria-label="expanded ? '收起' : '展开'"
+        :aria-expanded="expanded"
+        @keydown.enter.stop.prevent="toggle"
+        @keydown.space.stop.prevent="toggle"
+      >
+        <view class="collapse-triangle" :class="{ expanded }" />
+      </view>
     </view>
-    <view v-if="memberCount >= 2" class="range-row">
+    <view v-if="memberCount >= 2 && (!collapsible || expanded)" class="range-row">
       <view class="range-item">
         <text class="range-label">最低溢价率</text>
         <text class="range-value" :style="{ color: minColor }" selectable>
@@ -35,7 +47,17 @@ const props = defineProps<{
   maxPremium: number | null
   minStatus: PremiumStatus | null
   maxStatus: PremiumStatus | null
+  collapsible?: boolean
+  expanded?: boolean
 }>()
+
+const emit = defineEmits<{
+  (e: 'toggle'): void
+}>()
+
+function toggle() {
+  if (props.collapsible) emit('toggle')
+}
 
 const fallbackColor = '#475569'
 const minColor = computed(() => (
@@ -50,6 +72,36 @@ const maxColor = computed(() => (
 .group-header {
   padding: 22rpx 24rpx 18rpx;
   border-bottom: 1rpx solid #e2e8f0;
+}
+
+.group-header.collapsed {
+  border-bottom: 0;
+}
+
+.title-row.collapsible {
+  cursor: pointer;
+}
+
+.collapse-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 44rpx;
+  min-height: 44rpx;
+  flex-shrink: 0;
+}
+
+.collapse-triangle {
+  width: 0;
+  height: 0;
+  border-top: 8rpx solid transparent;
+  border-bottom: 8rpx solid transparent;
+  border-left: 11rpx solid #64748b;
+  transition: transform 0.15s ease;
+}
+
+.collapse-triangle.expanded {
+  transform: rotate(90deg);
 }
 
 .title-row {

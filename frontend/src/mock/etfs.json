@@ -3,13 +3,289 @@
     "code": "159509",
     "name": "纳指科技ETF景顺 (159509)",
     "short_name": "纳指科技ETF景顺",
+    "fund_type": "etf",
     "tracking_index": "NASDAQ_TECH",
     "tracking_index_name": "纳斯达克科技市值加权指数",
     "latest": {
-      "date": "2026-06-04",
-      "close": 2.813,
-      "nav": 2.3211,
-      "premium_rate": 0.21192538
+      "date": "2026-10-16",
+      "close": 3.252,
+      "nav": 2.3218,
+      "nav_date": "2026-10-15",
+      "premium_rate": 0.40063743647170297,
+      "premium_basis": "nav_proxy_iopv",
+      "iopv": null
+    }
+  },
+  {
+    "code": "513100",
+    "name": "纳指ETF国泰 (513100)",
+    "short_name": "纳指ETF国泰",
+    "fund_type": "etf",
+    "tracking_index": "NASDAQ100",
+    "tracking_index_name": "纳斯达克100指数",
+    "latest": {
+      "date": "2026-10-16",
+      "close": 2.356,
+      "nav": 2.0057,
+      "nav_date": "2026-10-15",
+      "premium_rate": 0.17465224111282843,
+      "premium_basis": "nav_proxy_iopv",
+      "iopv": null
+    }
+  },
+  {
+    "code": "159941",
+    "name": "纳指ETF广发 (159941)",
+    "short_name": "纳指ETF广发",
+    "fund_type": "etf",
+    "tracking_index": "NASDAQ100",
+    "tracking_index_name": "纳斯达克100指数",
+    "latest": {
+      "date": "2026-10-16",
+      "close": 1.738,
+      "nav": 1.5005,
+      "nav_date": "2026-10-15",
+      "premium_rate": 0.1582805731422859,
+      "premium_basis": "nav_proxy_iopv",
+      "iopv": null
+    }
+  },
+  {
+    "code": "513300",
+    "name": "纳斯达克ETF华夏 (513300)",
+    "short_name": "纳斯达克ETF华夏",
+    "fund_type": "etf",
+    "tracking_index": "NASDAQ100",
+    "tracking_index_name": "纳斯达克100指数",
+    "latest": {
+      "date": "2026-10-16",
+      "close": 2.81,
+      "nav": 2.4927,
+      "nav_date": "2026-10-15",
+      "premium_rate": 0.12729169173988045,
+      "premium_basis": "nav_proxy_iopv",
+      "iopv": null
+    }
+  },
+  {
+    "code": "159632",
+    "name": "纳斯达克ETF华安 (159632)",
+    "short_name": "纳斯达克ETF华安",
+    "fund_type": "etf",
+    "tracking_index": "NASDAQ100",
+    "tracking_index_name": "纳斯达克100指数",
+    "latest": {
+      "date": "2026-10-16",
+      "close": 2.541,
+      "nav": 2.2788,
+      "nav_date": "2026-10-15",
+      "premium_rate": 0.11506055818852028,
+      "premium_basis": "nav_proxy_iopv",
+      "iopv": null
+    }
+  },
+  {
+    "code": "513110",
+    "name": "纳指ETF华泰柏瑞 (513110)",
+    "short_name": "纳指ETF华泰柏瑞",
+    "fund_type": "etf",
+    "tracking_index": "NASDAQ100",
+    "tracking_index_name": "纳斯达克100指数",
+    "latest": {
+      "date": "2026-10-16",
+      "close": 2.555,
+      "nav": 2.3027,
+      "nav_date": "2026-10-15",
+      "premium_rate": 0.10956703000825119,
+      "premium_basis": "nav_proxy_iopv",
+      "iopv": null
+    }
+  },
+  {
+    "code": "159660",
+    "name": "纳指ETF汇添富 (159660)",
+    "short_name": "纳指ETF汇添富",
+    "fund_type": "etf",
+    "tracking_index": "NASDAQ100",
+    "tracking_index_name": "纳斯达克100指数",
+    "latest": {
+      "date": "2026-10-16",
+      "close": 2.467,
+      "nav": 2.1918,
+      "nav_date": "2026-10-15",
+      "premium_rate": 0.1255589013596131,
+      "premium_basis": "nav_proxy_iopv",
+      "iopv": null
+    }
+  },
+  {
+    "code": "159659",
+    "name": "纳斯达克100ETF招商 (159659)",
+    "short_name": "纳斯达克100ETF招商",
+    "fund_type": "etf",
+    "tracking_index": "NASDAQ100",
+    "tracking_index_name": "纳斯达克100指数",
+    "latest": {
+      "date": "2026-10-16",
+      "close": 2.471,
+      "nav": 2.1677,
+      "nav_date": "2026-10-15",
+      "premium_rate": 0.1399178853162338,
+      "premium_basis": "nav_proxy_iopv",
+      "iopv": null
+    }
+  },
+  {
+    "code": "513390",
+    "name": "纳指100ETF博时 (513390)",
+    "short_name": "纳指100ETF博时",
+    "fund_type": "etf",
+    "tracking_index": "NASDAQ100",
+    "tracking_index_name": "纳斯达克100指数",
+    "latest": {
+      "date": "2026-10-16",
+      "close": 2.497,
+      "nav": 2.2511,
+      "nav_date": "2026-10-15",
+      "premium_rate": 0.10923548487406157,
+      "premium_basis": "nav_proxy_iopv",
+      "iopv": null
+    }
+  },
+  {
+    "code": "159501",
+    "name": "纳指ETF嘉实 (159501)",
+    "short_name": "纳指ETF嘉实",
+    "fund_type": "etf",
+    "tracking_index": "NASDAQ100",
+    "tracking_index_name": "纳斯达克100指数",
+    "latest": {
+      "date": "2026-10-16",
+      "close": 2.207,
+      "nav": 1.884,
+      "nav_date": "2026-10-15",
+      "premium_rate": 0.17144373673036092,
+      "premium_basis": "nav_proxy_iopv",
+      "iopv": null
+    }
+  },
+  {
+    "code": "159513",
+    "name": "纳斯达克100ETF大成 (159513)",
+    "short_name": "纳斯达克100ETF大成",
+    "fund_type": "etf",
+    "tracking_index": "NASDAQ100",
+    "tracking_index_name": "纳斯达克100指数",
+    "latest": {
+      "date": "2026-10-16",
+      "close": 1.854,
+      "nav": 1.6711,
+      "nav_date": "2026-10-15",
+      "premium_rate": 0.10944886601639639,
+      "premium_basis": "nav_proxy_iopv",
+      "iopv": null
+    }
+  },
+  {
+    "code": "159696",
+    "name": "纳指ETF易方达 (159696)",
+    "short_name": "纳指ETF易方达",
+    "fund_type": "etf",
+    "tracking_index": "NASDAQ100",
+    "tracking_index_name": "纳斯达克100指数",
+    "latest": {
+      "date": "2026-10-16",
+      "close": 2.168,
+      "nav": 1.8678,
+      "nav_date": "2026-10-15",
+      "premium_rate": 0.16072384623621372,
+      "premium_basis": "nav_proxy_iopv",
+      "iopv": null
+    }
+  },
+  {
+    "code": "513870",
+    "name": "纳指ETF富国 (513870)",
+    "short_name": "纳指ETF富国",
+    "fund_type": "etf",
+    "tracking_index": "NASDAQ100",
+    "tracking_index_name": "纳斯达克100指数",
+    "latest": {
+      "date": "2026-10-16",
+      "close": 2.145,
+      "nav": 1.9104,
+      "nav_date": "2026-10-15",
+      "premium_rate": 0.12280150753768844,
+      "premium_basis": "nav_proxy_iopv",
+      "iopv": null
+    }
+  },
+  {
+    "code": "513500",
+    "name": "标普500ETF博时 (513500)",
+    "short_name": "标普500ETF博时",
+    "fund_type": "etf",
+    "tracking_index": "SP500",
+    "tracking_index_name": "标普500指数",
+    "latest": {
+      "date": "2026-10-19",
+      "close": 2.677,
+      "nav": 2.4359,
+      "nav_date": "2026-10-16",
+      "premium_rate": 0.09897779054969416,
+      "premium_basis": "nav_proxy_iopv",
+      "iopv": null
+    }
+  },
+  {
+    "code": "513650",
+    "name": "标普500ETF南方 (513650)",
+    "short_name": "标普500ETF南方",
+    "fund_type": "etf",
+    "tracking_index": "SP500",
+    "tracking_index_name": "标普500指数",
+    "latest": {
+      "date": "2026-10-19",
+      "close": 2.0,
+      "nav": 1.8551,
+      "nav_date": "2026-10-16",
+      "premium_rate": 0.07810899681957846,
+      "premium_basis": "nav_proxy_iopv",
+      "iopv": null
+    }
+  },
+  {
+    "code": "159612",
+    "name": "标普500ETF国泰 (159612)",
+    "short_name": "标普500ETF国泰",
+    "fund_type": "etf",
+    "tracking_index": "SP500",
+    "tracking_index_name": "标普500指数",
+    "latest": {
+      "date": "2026-10-19",
+      "close": 2.077,
+      "nav": 1.911,
+      "nav_date": "2026-10-16",
+      "premium_rate": 0.08686551543694401,
+      "premium_basis": "nav_proxy_iopv",
+      "iopv": null
+    }
+  },
+  {
+    "code": "159655",
+    "name": "标普500ETF华夏 (159655)",
+    "short_name": "标普500ETF华夏",
+    "fund_type": "etf",
+    "tracking_index": "SP500",
+    "tracking_index_name": "标普500指数",
+    "latest": {
+      "date": "2026-10-19",
+      "close": 2.018,
+      "nav": 1.8655,
+      "nav_date": "2026-10-16",
+      "premium_rate": 0.08174752077191101,
+      "premium_basis": "nav_proxy_iopv",
+      "iopv": null
     }
   }
 ]

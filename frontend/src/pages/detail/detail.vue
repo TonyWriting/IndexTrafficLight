@@ -31,7 +31,7 @@
 
         <view class="summary-main">
           <view>
-            <text class="metric-label">当前溢价率</text>
+            <text class="metric-label">溢价率</text>
             <text class="premium-value" :style="{ color: statusConfig.color }" selectable>
               {{ formatPremiumRate(stats.latest.premium_rate) }}
             </text>
@@ -42,16 +42,6 @@
           </view>
         </view>
 
-        <view class="quote-row">
-          <view class="quote-item">
-            <text class="quote-label">场内收盘价</text>
-            <text class="quote-value" selectable>{{ formatPrice(stats.latest.close) }}</text>
-          </view>
-          <view class="quote-item">
-            <text class="quote-label">基金净值 NAV</text>
-            <text class="quote-value" selectable>{{ formatPrice(stats.latest.nav) }}</text>
-          </view>
-        </view>
       </view>
 
       <view class="range-tabs">
@@ -155,38 +145,20 @@
         </view>
       </view>
 
-      <view class="recent-panel">
-        <view class="section-head">
-          <text class="section-title">最近记录</text>
-        </view>
-
-        <view class="table-head">
-          <text class="col date">日期</text>
-          <text class="col">场内收盘价</text>
-          <text class="col">基金净值 NAV</text>
-          <text class="col premium">溢价率</text>
-        </view>
-
-        <view v-for="record in recentRows" :key="record.date" class="table-row">
-          <text class="col date" selectable>{{ formatShortDate(record.date) }}</text>
-          <text class="col" selectable>{{ formatPrice(record.close) }}</text>
-          <text class="col" selectable>{{ formatPrice(record.nav) }}</text>
-          <text class="col premium" selectable>{{ formatPremiumRate(record.premium_rate) }}</text>
-        </view>
-      </view>
     </view>
   </view>
 </template>
 
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref } from 'vue'
-import { onLoad, onShareAppMessage, onShareTimeline } from '@dcloudio/uni-app'
+import { onHide, onLoad, onShareAppMessage, onShareTimeline, onShow, onUnload } from '@dcloudio/uni-app'
 import PremiumChart from '../../components/PremiumChart.vue'
 import {
   fetchPremiumHistory,
   fetchReviewMode,
-  getCachedPremiumHistory,
   PREMIUM_CACHE_UPDATED_EVENT,
+  startPremiumAutoRefresh,
+  stopPremiumAutoRefresh,
 } from '../../api'
 import type { EtfPremiumHistory, PremiumRange } from '../../types'
 import {
@@ -194,9 +166,7 @@ import {
   RANGE_OPTIONS,
 } from '../../types'
 import {
-  filterByRange,
   formatPremiumRate,
-  formatPrice,
   formatShortDate,
   summarizePremium,
 } from '../../utils/premium'
@@ -205,18 +175,17 @@ const code = ref('159509')
 const loading = ref(true)
 const error = ref('')
 const history = ref<EtfPremiumHistory | null>(null)
-const selectedRange = ref<PremiumRange>('1y')
+const selectedRange = ref<PremiumRange>('3m')
 const explainSheetOpen = ref(false)
+let pageVisible = false
 
-const explainSummary = 'ETF 的场内交易价格和基金净值不是一回事。溢价率看的是：场内价格相对基金净值多贵或便宜多少。'
+const explainSummary = '优先使用当天采集的 IOPV；缺少时使用同一天的净值模拟记录，复盘场内收盘溢价。'
 const premiumDefinitionParagraphs = [
-  'ETF 有两个价格：场内交易价格由买卖报价实时决定，基金净值 NAV 则按每个净值日，根据基金持有的一篮子资产、汇率和费用等计算得出。溢价率比较的是：场内收盘价相对基金净值贵了多少或便宜多少。',
-  '用于比较的基金净值口径有两类：盘中参考净值 IOPV，和收盘后确认的正式净值 NAV。本页使用 NAV 口径：收盘溢价率 = 场内收盘价 / 当日 NAV - 1。正数是溢价，负数是折价。',
-  'IOPV 是盘中的基金份额参考净值。同花顺等 App 里盘中看到的实时溢价率，通常更接近 IOPV 口径：拿最新的场内交易价格和盘中参考净值比较，用来辅助盘中交易。',
-  'QDII ETF 跟踪海外资产，A 股交易时海外市场可能没开盘，IOPV 会用汇率、期货或上一交易日价格估算，所以它是参考值。本页选择 NAV，是因为历史曲线、分位和回测需要每天都用同一套规则比较。',
-  'NAV 需要等基金公司披露后才能计算，因此可能和交易软件里的实时溢价率不同，最近一两天也可能暂时没有数据。它回答的是“今天收盘后确认，交易价格相对正式净值贵不贵”，不承担实时买卖提示的作用。',
+  '溢价率 = 场内收盘价 ÷ 参考净值 − 1。正数是溢价，负数是折价。',
+  '同一交易日有有效 IOPV 时优先使用，并采用同次采集的成交价；没有时使用该交易日已保存的净值模拟记录。两者都没有就跳过。',
+  '净值模拟采用 A 股开盘前最近一次美股收盘对应日期的正式净值。',
 ]
-const premiumLevelIntro = '本页用当前溢价率在所选区间内的历史分位判断高低：分位越高，代表当前价格相对 NAV 越贵。'
+const premiumLevelIntro = '历史分位表示本次溢价率在所选区间中的位置：分位越高，溢价越高。'
 const disclaimerParagraphs = [
   '本项目为个人维护的数据整理与展示工具，基于公开信息和本项目计算逻辑生成，不保证数据的准确性、完整性和及时性。内容仅供学习研究和信息参考，不构成任何投资建议，也不应作为买入或卖出依据。实际决策前请自行核验数据并阅读基金相关法律文件，市场有风险，投资需谨慎。',
 ]
@@ -240,12 +209,6 @@ const statCards = computed(() => [
   { label: '中位数', value: formatPremiumRate(stats.value.median) },
 ])
 
-const recentRows = computed(() => (
-  filterByRange(history.value?.data || [], selectedRange.value)
-    .slice(-5)
-    .reverse()
-))
-
 async function loadData(forceRefresh = false, silent = false) {
   if (!silent) {
     loading.value = true
@@ -253,12 +216,6 @@ async function loadData(forceRefresh = false, silent = false) {
   }
 
   try {
-    const cached = !forceRefresh ? getCachedPremiumHistory(code.value) : null
-    if (cached) {
-      applyHistory(cached)
-      return
-    }
-
     if (await fetchReviewMode()) {
       closeUnavailableDetail()
       return
@@ -278,9 +235,12 @@ async function loadData(forceRefresh = false, silent = false) {
 
 function applyHistory(data: EtfPremiumHistory): void {
   history.value = data
-  uni.setNavigationBarTitle({
-    title: history.value.short_name || code.value,
-  })
+  if (pageVisible) {
+    uni.setNavigationBarTitle({
+      title: history.value.short_name || code.value,
+    })
+    startPremiumAutoRefresh()
+  }
   error.value = ''
 }
 
@@ -294,15 +254,28 @@ function closeUnavailableDetail() {
 }
 
 function handlePremiumCacheUpdated() {
-  if (!loading.value) {
+  if (pageVisible && !loading.value) {
     void loadData(false, true)
   }
 }
 
 onLoad((query: Record<string, string | undefined> = {}) => {
   code.value = query.code || '159509'
-  loadData()
 })
+
+onShow(() => {
+  pageVisible = true
+  void loadData(false, history.value !== null)
+})
+
+function stopPageRefresh(): void {
+  if (!pageVisible) return
+  pageVisible = false
+  stopPremiumAutoRefresh()
+}
+
+onHide(stopPageRefresh)
+onUnload(stopPageRefresh)
 
 onMounted(() => {
   uni.$on(PREMIUM_CACHE_UPDATED_EVENT, handlePremiumCacheUpdated)
@@ -425,7 +398,6 @@ onShareTimeline(() => ({
 }
 
 .metric-label,
-.quote-label,
 .stat-label {
   display: block;
   color: #64748b;
@@ -453,14 +425,6 @@ onShareTimeline(() => ({
   line-height: 46rpx;
 }
 
-.quote-row {
-  display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: 14rpx;
-  margin-top: 26rpx;
-}
-
-.quote-item,
 .stat-cell {
   min-width: 0;
   background: #f8fafc;
@@ -468,7 +432,6 @@ onShareTimeline(() => ({
   padding: 14rpx 16rpx;
 }
 
-.quote-value,
 .stat-value {
   display: block;
   margin-top: 2rpx;
@@ -742,67 +705,4 @@ onShareTimeline(() => ({
   margin-top: 0;
 }
 
-.recent-panel {
-  margin-top: 20rpx;
-  background: #ffffff;
-  border: 1rpx solid #e2e8f0;
-  border-radius: 16rpx;
-  padding: 24rpx;
-}
-
-.section-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 20rpx;
-  margin-bottom: 16rpx;
-}
-
-.section-title {
-  color: #0f172a;
-  font-size: 30rpx;
-  font-weight: 800;
-  line-height: 38rpx;
-}
-
-.table-head,
-.table-row {
-  display: grid;
-  grid-template-columns: 1.05fr 1.25fr 1.45fr 1.05fr;
-  gap: 10rpx;
-  align-items: center;
-  min-height: 56rpx;
-}
-
-.table-head {
-  border-bottom: 1rpx solid #e2e8f0;
-}
-
-.table-row {
-  border-bottom: 1rpx solid #f1f5f9;
-}
-
-.table-row:last-child {
-  border-bottom: 0;
-}
-
-.col {
-  color: #0f172a;
-  font-size: 22rpx;
-  line-height: 30rpx;
-  text-align: right;
-}
-
-.table-head .col {
-  color: #64748b;
-  font-weight: 700;
-}
-
-.col.date {
-  text-align: left;
-}
-
-.col.premium {
-  font-weight: 800;
-}
 </style>
