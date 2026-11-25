@@ -9,27 +9,26 @@ venv/
 backend/local.settings.json
 backend/.python_packages/
 
+# Azurite (local storage emulator)
+__azurite_db*__.json
+__blobstorage__/
+__queuestorage__/
+
 # Node / uni-app
 node_modules/
 frontend/dist/
 frontend/unpackage/
-package-lock.json
 
-# Environment (contains secrets or local overrides)
+# Environment (local overrides; see frontend/.env.example)
 .env
-.env.local
-frontend/.env.development
-frontend/.env.production
+.env.*
+!.env.example
 
 # IDE
 .vscode/
 .idea/
 *.swp
 *.swo
-*.suo
-*.ntvs*
-*.njsproj
-*.sln
 
 # OS
 .DS_Store
@@ -44,3 +43,6 @@ pictures/
 
 # Claude Code internal
 .claude/
+
+# Local import receipts
+backend/reports/
