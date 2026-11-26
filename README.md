@@ -1,109 +1,143 @@
-# ETF 溢价率历史复盘
+# QDII 场内基金溢价灯
 
-优先使用采集的 IOPV，缺少时使用净值模拟记录，展示 17 只场内 ETF 的历史溢价率、分位和曲线。范围为 12 只纳斯达克100 ETF、景顺长城纳指科技 ETF（159509），以及博时（513500）、南方（513650）、国泰（159612）、华夏（159655）4 只标普500 ETF；基金配置见 [config.py](backend/shared/config.py)。
+用历史分位判断 QDII 场内 ETF 当前的溢价率处于高位还是低位。
 
-## 计算口径
+QDII 基金受外汇额度限制，申购常被暂停，场内价格容易高于基金净值，高出的部分就是溢价。本项目每天记录 17 只纳斯达克 100、纳指科技和标普 500 场内 ETF 的溢价率，并把当前值放到近 3 月、近半年、近 1 年的历史中比较。微信小程序名为「灯下记录」。
 
-对同一个 A 股交易日 D，有有效 IOPV 时，使用同次采集的成交价和 IOPV；否则使用此前保存的 D 日净值模拟记录。两者都没有时跳过，不沿用其他交易日的记录。
+<table>
+  <tr>
+    <th>首页</th>
+    <th>详情页</th>
+  </tr>
+  <tr>
+    <td valign="top"><img src="docs/images/home.jpg" alt="首页：按指数分组展示各基金的溢价率、历史分位和溢价状态" width="260"></td>
+    <td valign="top"><img src="docs/images/detail.jpg" alt="详情页：单只基金的溢价率与场内收盘价走势" width="260"></td>
+  </tr>
+</table>
+
+## 功能
+
+- **首页**：按跟踪指数分组，展示每只基金的最新溢价率、历史分位和溢价状态
+- **详情页**：溢价率与场内收盘价走势，以及区间平均值和中位数
+- **观察区间**：近 3 月、近半年、近 1 年
+- **自动更新**：每个交易日收盘后采集 IOPV，刷新首页数据
+
+## 计算方法
 
 ```text
-溢价率 = D 日场内收盘价 / 参考净值 - 1
+溢价率 = 场内收盘价 / 参考净值 - 1
 ```
 
-净值模拟部分使用 D 日开盘前最近一次美股收盘对应日期 U 的正式单位净值。缺少 U 日净值就跳过，不填零、不插值、不沿用更早净值。例如 2026-06-22 使用 06-18 净值；2026-10-08 缺少所需的 10-07 净值，模拟记录跳过。
+参考净值优先使用收盘后采集的 IOPV，即交易时段发布的基金份额参考净值。当天没有 IOPV 时，用开盘前最近一个美股交易日的基金单位净值近似；两者都没有的交易日不参与计算。
 
-净值模拟部分是事后近似值，未逐日核对官方历史 IOPV、汇率费用差异和净值首次披露时间。
+历史分位是所选区间内溢价率不高于当前值的交易日占比，据此分为五档：
 
-净值模拟历史工作簿位于 `C:\MarkDowns\Projects\IndexTrafficLight`：
-
-- `纳指13只ETF_净值模拟IOPV溢价率_20251017-20261016.xlsx`，覆盖 2025-10-17 至 2026-10-16。
-- `标普500四只ETF_净值模拟IOPV溢价率_20251020-20261019.xlsx`，覆盖 2025-10-20 至 2026-10-19。
-
-## 数据管理
-
-```powershell
-cd C:\Projects\IndexTrafficLight\backend
-pip install -r requirements.txt
-$workbook = 'C:\MarkDowns\Projects\IndexTrafficLight\标普500四只ETF_净值模拟IOPV溢价率_20251020-20261019.xlsx'
-python cli.py import-excel --file $workbook --all --dry-run
-python cli.py import-excel --file $workbook --all
-python cli.py verify-excel --file $workbook
-python cli.py dashboard
-python cli.py query 513500 --days 365 --limit 10
-```
-
-`reset-history` **直接删除四张 Excel 相关表的全部实体，不备份，保留表本身**，不清空独立采集的 `QDIIEtfIopvHistory`。执行前须保证没有其他写入程序运行。
-
-`import-excel` 先检查整份工作簿的基金范围、日期、净值日期批注、数值、公式和跳过记录。工作簿可以只包含已配置基金中的一部分。`--all` 按 Excel 总览顺序逐只导入；`--code` 只导入指定基金。每只写完即读回核对，失败停止；同一基金可重复执行，不产生重复记录。
-
-仅导入 Excel 保留的交易日。价格按 D 日存储，净值按 U 日去重存储，溢价按 D 日存储。`verify-excel` 只核对工作簿所含基金的分区，检查三张历史表中的日期和数值，其他基金不受影响。最后执行 `dashboard` 生成首页快照。
-
-命令报告位于 `backend/reports/`，包含 Excel 文件哈希、数量和执行时间；该目录不提交、不部署。
-
-## 存储与 API
-
-使用 Azure Table Storage，通过环境变量 `AZURE_STORAGE_CONNECTION_STRING` 连接；本地 CLI 也会读取未提交的 `backend/local.settings.json`。
-
-| 表 | 内容 |
+| 状态 | 历史分位 |
 | --- | --- |
-| QDIIEtfPriceHistory | Excel 中保留的收盘价 |
-| QDIIEtfNavHistory | 实际使用的正式净值，按净值日期去重 |
-| QDIIEtfPremiumHistory | 净值模拟 IOPV 的估算溢价率 |
-| QDIIEtfDashboardSnapshot | 最新首页快照，保留一条 |
-| QDIIEtfIopvHistory | 实际采集的每日 IOPV 与成交价 |
+| 过低 | P10 以下 |
+| 偏低 | P10（含）至 P30 |
+| 中游 | P30（含）至 P70 |
+| 偏高 | P70（含）至 P90 |
+| 过高 | P90 及以上 |
 
-历史表使用基金代码作为 `PartitionKey`、对应日期的 `YYYYMMDD` 作为 `RowKey`。
+## 项目结构
 
 ```text
-GET /api/dashboard
-GET /api/etfs
-GET /api/etfs/history?code=159509&start=2025-10-17&end=2026-10-16
-GET /api/review-mode
+backend/                Azure Functions（Python），数据存于 Azure Table Storage
+├── function_app.py     HTTP API 与收盘后定时采集
+├── cli.py              数据导入与维护命令
+└── shared/             基金配置、存储、IOPV 采集、Excel 导入、首页快照
+frontend/               uni-app + Vue 3 + TypeScript，构建为微信小程序与 H5
+├── src/pages/          首页与详情页
+└── src/config/         首页排序与评级
 ```
 
-历史 API 按日期合并两种来源，同一天只返回一条。IOPV 记录包含 `iopv`，`nav`、`nav_date` 为 `null`，`premium_basis="iopv"`；净值模拟记录包含 `nav`、`nav_date`，`iopv=null`，`premium_basis="nav_proxy_iopv"`。两者均包含 `date`、`close`、`premium_rate`。`premium_rate` 存小数，前端显示百分比。
+跟踪的基金清单在 [`backend/shared/config.py`](backend/shared/config.py)。
 
-`QDIIEtfPremiumHistory` 保存 Excel 的净值模拟记录；IOPV 优先级在读取时应用，采集数据不会覆盖这份模拟历史。
+## 快速开始
 
-首页从快照读取，不在请求时计算；没有快照时返回 503。观察区间为 `3m`、`6m`、`1y`，均按最新有效记录向前平移自然月。历史分位采用所选区间内小于等于当前溢价率的记录占比，状态阈值为 P10、P30、P70、P90。
+### 前置条件
 
-首页纳斯达克100组的固定顺序和个人评级配置在 [etfDisplay.ts](frontend/src/config/etfDisplay.ts)，均沿用“从夯到拉”文章，易方达、博时排在第一行。切换区间不会改变排列；溢价状态随数据变化。超过 2 只基金的分组默认折叠，仅显示指数标题栏，点击三角展开；2 只及以下直接显示。景顺 159509 属于单独的纳指科技组，未配置该项评级。
+- Python 3.10+ 和 [Azure Functions Core Tools](https://learn.microsoft.com/azure/azure-functions/functions-run-local) v4
+- Node.js 18+
+- Azure Storage 账号；本地运行定时任务还需要 [Azurite](https://learn.microsoft.com/azure/storage/common/storage-use-azurite)
 
-标普500组按《全部 5 只场内标普500，从夯到拉》的 ETF 顺序排列：博时“夯”、南方“顶级”、国泰“人上人”、华夏“NPC”。易方达 161125 是 LOF，未纳入本项目的 ETF 清单。该组同样默认折叠，位于两个纳指组之后。
+### 后端
 
-## IOPV 定时采集
-
-北京时间每天 **15:30、16:30、18:30** 触发，Azure UTC cron 为 `0 30 7,8,10 * * *`。先批量请求腾讯，首次失败后最多重试 5 次，每次间隔 10 秒；未取得有效数据的基金再切换东方财富，同样首次加 5 次重试。单次 HTTP 超时 10 秒；已成功的基金不重复请求。
-
-`QDIIEtfIopvHistory` 每只基金、每个行情日期只保留一条。字段为 `date_str`、`close`、`iopv`、`source`、`quote_at_bj`、`fetched_at_bj`；主键是基金代码和行情日期。后一次成功覆盖前一次，失败不清空已有记录。行情时间和采集时间分别记录，行情时间不代表 IOPV 独立更新时间。
-
-周末及北京时间 15:30 前跳过；其他时段只接收当天 15:00 后的有效行情。休市返回的旧日期、缺失字段、无效数值都不会写成当天数据。成功写入后重建首页快照。
-
-```powershell
-python cli.py collect-iopv --dry-run
-python cli.py collect-iopv
-python cli.py collect-iopv --code 513500 513650 159612 159655
+```bash
+cd backend
+python -m venv .venv
+source .venv/bin/activate        # Windows: .venv\Scripts\activate
+pip install -r requirements.txt
 ```
 
-`--dry-run` 只采集和输出报告，不写入数据库。`--code` 可限定本次采集范围；定时任务始终采集全部已配置基金。IOPV 采集代码见 [iopv.py](backend/shared/iopv.py)。
+在 `backend/` 下新建 `local.settings.json`（已被 git 忽略）：
 
-## 开发与部署
+```json
+{
+  "IsEncrypted": false,
+  "Values": {
+    "FUNCTIONS_WORKER_RUNTIME": "python",
+    "AzureWebJobsStorage": "UseDevelopmentStorage=true",
+    "AZURE_STORAGE_CONNECTION_STRING": "<Azure Storage 连接字符串>"
+  }
+}
+```
 
-```powershell
-cd C:\Projects\IndexTrafficLight\backend
-python -m unittest discover -s tests -v
-func start
-func azure functionapp publish underlamp
+然后运行 `func start`。
 
-cd C:\Projects\IndexTrafficLight\frontend
+### 前端
+
+```bash
+cd frontend
 npm install
-npm test
-npm run type-check
-npm run dev:h5
-npm run build:h5
-npm run build:mp-weixin
+cp .env.example .env.local       # 填写 VITE_API_BASE_URL
+npm run dev:h5                   # 浏览器预览
+npm run dev:mp-weixin            # 用微信开发者工具打开 dist/dev/mp-weixin
 ```
 
-前端使用 uni-app、Vue 3、TypeScript。`VITE_API_BASE_URL` 设置后端地址，`VITE_USE_MOCK=true` 可使用从上述 Excel 导出的本地数据。本地和生产配置均通过 `VITE_DISABLE_CACHE=false` 启用一小时缓存；设置为 `true` 会关闭并清理数据缓存。基金清单变化时增加 `CACHE_VERSION`，使旧缓存失效。
+没有后端时，把 `VITE_USE_MOCK` 设为 `true`，前端会使用仓库内置的示例数据。
 
-`REVIEW_MODE_ENABLED` 控制现有小程序审核展示模式。后端包含 HTTP 接口及 `collect_daily_iopv` 定时任务；部署并启动 Function App 后才会定时执行。微信小程序构建产物位于 `frontend/dist/build/mp-weixin`，通过微信开发者工具上传发布。
+## 配置
+
+| 变量 | 位置 | 说明 |
+| --- | --- | --- |
+| `AZURE_STORAGE_CONNECTION_STRING` | 后端 | Azure Table Storage 连接字符串 |
+| `VITE_API_BASE_URL` | 前端 | 后端 API 地址 |
+| `VITE_USE_MOCK` | 前端 | 为 `true` 时使用内置示例数据 |
+| `VITE_DISABLE_CACHE` | 前端 | 为 `false` 时启用一小时本地缓存；未设置时不缓存 |
+
+## 数据维护
+
+历史数据先由 Excel 工作簿导入，之后每个交易日收盘后由定时任务自动追加 IOPV。在 `backend/` 下运行：
+
+```bash
+python cli.py import-excel --file <workbook.xlsx> --all --dry-run   # 只校验，不写入
+python cli.py import-excel --file <workbook.xlsx> --all             # 导入
+python cli.py verify-excel --file <workbook.xlsx>                   # 核对已导入的数据
+python cli.py dashboard                                             # 重建首页快照
+python cli.py collect-iopv --dry-run                                # 手动采集 IOPV，不写入
+```
+
+工作簿格式以 [`shared/excel_import.py`](backend/shared/excel_import.py) 的校验规则为准，全部命令见 `python cli.py --help`。
+
+## API
+
+| 接口 | 说明 |
+| --- | --- |
+| `GET /api/dashboard` | 首页数据，包含各观察区间的分位和状态 |
+| `GET /api/etfs` | 基金列表及最新溢价率 |
+| `GET /api/etfs/history?code=159696&start=2026-01-01&end=2026-06-30` | 单只基金的溢价历史，`start`、`end` 可省略 |
+
+`premium_rate` 为小数，例如 `0.1708` 表示 17.08%。
+
+## 测试与部署
+
+- 后端测试：在 `backend/` 下运行 `python -m unittest discover -s tests`
+- 前端测试：在 `frontend/` 下运行 `npm test` 和 `npm run type-check`
+- 部署后端：`func azure functionapp publish <函数应用名>`
+- 发布小程序：运行 `npm run build:mp-weixin`，用微信开发者工具打开 `frontend/dist/build/mp-weixin` 上传
+
+## 免责声明
+
+数据来自公开行情与基金公告，可能存在延迟或误差。首页评级仅代表作者个人观点。本项目仅供学习研究，不构成投资建议。
