@@ -79,7 +79,7 @@ function harness({ disabled = false, mock = false } = {}) {
   function page(name) {
     const hooks = {}, filename = path.join(SRC, `pages/${name}/${name}.vue`)
     const source = fs.readFileSync(filename, 'utf8').match(/<script setup lang="ts">([\s\S]*?)<\/script>/)[1]
-    const fields = name === 'index' ? 'dashboard, dashboardGroups, viewMode' : 'history, displayName'
+    const fields = name === 'index' ? 'dashboard, dashboardGroups, viewMode, toggleGroup' : 'history, displayName'
     const state = evaluate(source + `\nexports.state = { ${fields}, loading, error };`, filename, hooks).state
     return { state, async fire(event, arg) {
       for (const callback of hooks[event] || []) await callback(arg)
@@ -197,6 +197,25 @@ test('home entry, manual refresh and timer reuse each dashboard response', async
   assert.equal(h.intervals.size, 0)
 })
 
+test('groups with more than two funds start folded and expand on toggle', async () => {
+  const h = harness({ disabled: true }), page = h.page('index')
+  const perRange = value => ({ '3m': value, '6m': value, '1y': value })
+  const stats = perRange({ latest: { date: '2026-11-25', premium_rate: 0.1 }, percentile: 0.5, status: 3 })
+  const group = (key, members) => ({
+    tracking_index: key, tracking_index_name: key, members, ranges: perRange({ min_premium: 0.1, max_premium: 0.1 }),
+  })
+  h.respond(url => url.includes('review-mode') ? { review_mode: false } : {
+    items: ['a1', 'a2', 'b1', 'b2', 'b3'].map(code => ({ code, name: code, short_name: code, fund_type: 'etf', stats })),
+    groups: [group('TWO', ['a1', 'a2']), group('THREE', ['b1', 'b2', 'b3'])],
+  })
+  await page.fire('onShow')
+  await page.fire('mounted')
+  const expanded = () => page.state.dashboardGroups.value.map(item => item.expanded)
+  assert.deepEqual(expanded(), [true, false])
+  page.state.toggleGroup('THREE')
+  assert.deepEqual(expanded(), [true, true])
+})
+
 test('shared detail supports hourly refresh, resume and unload without visiting home', async () => {
   const h = harness(), page = h.page('detail')
   await page.fire('onLoad', { code: '159696' })
@@ -222,8 +241,9 @@ test('mock mode keeps all funds, homepage company names, ratings and detail fund
   await home.fire('onShow')
   assert.equal(home.state.error.value, '')
   const groups = home.state.dashboardGroups.value
-  assert.equal(groups.length, 3)
-  assert.equal(groups.reduce((count, group) => count + group.members.length, 0), 17)
+  const mockEtfs = require('../src/mock/etfs.json')
+  assert.equal(groups.length, new Set(mockEtfs.map(etf => etf.tracking_index)).size)
+  assert.equal(groups.reduce((count, group) => count + group.members.length, 0), mockEtfs.length)
   assert.equal(groups[0].members[0].displayName, '景顺长城')
   assert.equal(groups[1].members[0].displayName, '易方达')
   assert.equal(groups[1].members[0].rating, '夯')

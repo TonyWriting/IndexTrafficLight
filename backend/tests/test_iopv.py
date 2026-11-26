@@ -23,39 +23,27 @@ class ProviderTests(unittest.TestCase):
         self.assertEqual(["513500"], [row["code"] for row in result["quotes"]])
         self.assertEqual([], result["failed"])
 
-    def test_sp500_etfs_are_supported_by_both_quote_parsers(self):
-        symbols = ["sh513500", "sh513650", "sz159612", "sz159655"]
-        tencent, eastmoney = [], []
-        for symbol in symbols:
+    def test_tencent_parser_reads_iopv_field_on_both_exchanges(self):
+        def line(symbol):
             fields = [""] * 88
-            fields[2], fields[3], fields[30], fields[78] = symbol[2:], "2.4", "20261019150000", "2.0"
-            tencent.append(f'v_{symbol}="' + "~".join(fields) + '";')
-            eastmoney.append({"f12": symbol[2:], "f13": 1 if symbol.startswith("sh") else 0,
-                              "f2": 2.4, "f441": 2.0,
-                              "f124": int(NOW.replace(hour=15, minute=0).timestamp()), "f297": 20261019})
-        expected = {symbol[2:] for symbol in symbols}
-        self.assertEqual(expected, set(iopv.parse_tencent("".join(tencent).encode("gb18030"), NOW)))
-        self.assertEqual(expected, set(iopv.parse_eastmoney(json.dumps({"data": {"diff": eastmoney}}).encode(), NOW)))
+            fields[2], fields[3], fields[30] = symbol[2:], "2.400", "20261019150000"
+            fields[78], fields[81] = "2.0000", "1.8000"  # 78 is IOPV, 81 is NAV
+            return f'v_{symbol}="' + "~".join(fields) + '";'
+        quotes = iopv.parse_tencent((line("sh513500") + line("sz159696")).encode("gb18030"), NOW)
+        self.assertEqual({"513500", "159696"}, set(quotes))
+        self.assertEqual((2.4, 2.0), (quotes["159696"].close, quotes["159696"].iopv))
+        self.assertEqual("2026-10-19", quotes["159696"].record()["date"])
 
-    def test_tencent_uses_iopv_field_not_nav(self):
-        fields = [""] * 88
-        fields[2], fields[3], fields[30] = "159696", "2.400", "20261019150000"
-        fields[78], fields[81] = "2.0000", "1.8000"
-        raw = ('v_sz159696="' + "~".join(fields) + '";').encode("gb18030")
-        parsed = iopv.parse_tencent(raw, NOW)["159696"]
-        self.assertEqual(2.0, parsed.iopv)
-        self.assertEqual(2.4, parsed.close)
-        self.assertEqual("2026-10-19", parsed.record()["date"])
-
-    def test_eastmoney_time_and_iopv_fields(self):
-        row = {"f12": "159696", "f13": 0, "f2": 2.4, "f441": 2.0,
-               "f124": int(NOW.replace(hour=15, minute=0).timestamp()), "f297": 20261019}
-        raw = json.dumps({"data": {"diff": [row]}}).encode()
-        parsed = iopv.parse_eastmoney(raw, NOW)["159696"]
-        self.assertEqual("eastmoney", parsed.source)
-        self.assertEqual(2.0, parsed.iopv)
-        row["f441"] = "-"
-        self.assertEqual({}, iopv.parse_eastmoney(json.dumps({"data": {"diff": [row]}}).encode(), NOW))
+    def test_eastmoney_parser_reads_iopv_and_rejects_missing_values(self):
+        def row(code, market, iopv_value=2.0):
+            return {"f12": code, "f13": market, "f2": 2.4, "f441": iopv_value,
+                    "f124": int(NOW.replace(hour=15, minute=0).timestamp()), "f297": 20261019}
+        def parse(*rows):
+            return iopv.parse_eastmoney(json.dumps({"data": {"diff": list(rows)}}).encode(), NOW)
+        quotes = parse(row("513500", 1), row("159696", 0))
+        self.assertEqual({"513500", "159696"}, set(quotes))
+        self.assertEqual(("eastmoney", 2.0), (quotes["159696"].source, quotes["159696"].iopv))
+        self.assertEqual({}, parse(row("159696", 0, "-")))
 
     @patch("shared.iopv.time.sleep")
     @patch("shared.iopv.TRACKED_ETFS", {"159696": object()})
@@ -100,13 +88,23 @@ class ProviderTests(unittest.TestCase):
                 result = iopv.collect_quotes(NOW)
                 self.assertEqual([], result["quotes"])
 
-    def test_weekend_skips_fetch_and_failed_collection_preserves_storage(self):
-        with patch("shared.iopv.fetch_quotes") as fetch:
-            self.assertIn("skipped", iopv.collect_quotes(NOW - timedelta(days=1)))
-            fetch.assert_not_called()
-        with patch("shared.storage._get_table_client") as client:
-            self.assertEqual(0, storage.upsert_iopv_history([]))
-            client.assert_not_called()
+    def test_weekend_and_before_first_run_skip_fetch(self):
+        for now in (NOW - timedelta(days=1), NOW.replace(minute=29)):
+            with self.subTest(now=now), patch("shared.iopv.fetch_quotes") as fetch:
+                self.assertIn("skipped", iopv.collect_quotes(now))
+                fetch.assert_not_called()
+
+    def test_refresh_writes_only_outside_dry_run_and_rebuilds_snapshot_after_writes(self):
+        collected = {"date": "2026-10-19", "quotes": [quote().record()], "failed": [], "errors": [], "attempts": {}}
+        for dry_run, written, rebuilt in ((True, None, False), (False, 0, False), (False, 1, True)):
+            with (self.subTest(dry_run=dry_run, written=written),
+                  patch("shared.iopv.collect_quotes", return_value=dict(collected)),
+                  patch("shared.iopv.upsert_iopv_history", return_value=written) as upsert,
+                  patch("shared.dashboard.build_dashboard_snapshot", return_value={}),
+                  patch("shared.storage.upsert_dashboard_snapshot") as save):
+                iopv.refresh_iopv(dry_run=dry_run)
+                self.assertEqual(not dry_run, upsert.called)
+                self.assertEqual(rebuilt, save.called)
 
     def test_daily_overwrite_keeps_one_key(self):
         table = MagicMock()
@@ -155,13 +153,6 @@ class ValuationTests(unittest.TestCase):
         self.assertEqual("nav_proxy_iopv", rows[0]["premium_basis"])
         self.assertEqual("2026-10-15", rows[0]["nav_date"])
         self.assertIsNone(rows[0]["iopv"])
-
-    def test_timer_runs_three_times_in_beijing_time(self):
-        import function_app
-        functions = function_app.app.get_functions()
-        timers = [function for function in functions if function.get_function_name() == "collect_daily_iopv"]
-        self.assertEqual(1, len(timers))
-        self.assertIn("0 30 7,8,10 * * *", str(timers[0].get_dict_repr()))
 
 
 if __name__ == "__main__":

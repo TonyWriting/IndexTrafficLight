@@ -50,6 +50,17 @@ class ApiTests(unittest.TestCase):
                 self.assertEqual(400, status)
                 read.assert_not_called()
 
+    def test_timer_run_fails_when_any_fund_is_still_missing(self):
+        # A raised error marks the Azure run as failed, which is what surfaces collection gaps.
+        for failed in ([], ["159696"]):
+            result = {"date": "2026-10-19", "written": 16, "failed": failed, "skipped": None}
+            with self.subTest(failed=failed), patch("function_app.refresh_iopv", return_value=result):
+                if failed:
+                    with self.assertRaises(RuntimeError):
+                        function_app.collect_daily_iopv(None)
+                else:
+                    function_app.collect_daily_iopv(None)
+
 
 if __name__ == "__main__":
     unittest.main()
