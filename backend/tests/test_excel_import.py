@@ -50,6 +50,9 @@ class WorkbookImportTests(unittest.TestCase):
         self.client = patch("shared.storage._get_table_client", side_effect=self.tables.__getitem__)
         self.mock_client = self.client.start()
         self.addCleanup(self.client.stop)
+        self.write_fixture()
+
+    def write_fixture(self):
         workbook = openpyxl.Workbook()
         overview = workbook.active
         overview.title = "总览"
@@ -77,37 +80,33 @@ class WorkbookImportTests(unittest.TestCase):
         self.assertEqual("2025-11-26", rows[1]["nav_date"])
         self.assertEqual(2, len(source_records(rows)[1]))
 
-    def test_missing_comment_rejected_before_storage(self):
-        self.edit(lambda sheet: setattr(sheet["C2"], "comment", None))
-        with self.assertRaisesRegex(ValueError, "NAV date comment"):
-            read_workbook(self.path)
+    def test_invalid_rows_rejected_before_storage(self):
+        cases = {
+            "NAV date comment": lambda sheet: setattr(sheet["C2"], "comment", None),
+            "premium mismatch": lambda sheet: setattr(sheet["D2"], "value", 0.3),
+            "duplicate date": lambda sheet: setattr(sheet["A3"], "value", sheet["A2"].value),
+            # Rows 2 and 3 share one NAV date, so they must use the same NAV.
+            "Conflicting NAV": lambda sheet: (setattr(sheet["C3"], "value", 2.1),
+                                              setattr(sheet["D3"], "value", 2.4 / 2.1 - 1)),
+        }
+        for message, change in cases.items():
+            with self.subTest(message):
+                self.write_fixture()
+                self.edit(change)
+                with self.assertRaisesRegex(ValueError, message):
+                    read_workbook(self.path)
         self.mock_client.assert_not_called()
 
-    def test_inconsistent_premium_rejected(self):
-        self.edit(lambda sheet: setattr(sheet["D2"], "value", 0.3))
-        with self.assertRaisesRegex(ValueError, "premium mismatch"):
-            read_workbook(self.path)
-
-    def test_duplicate_date_rejected(self):
-        self.edit(lambda sheet: setattr(sheet["A3"], "value", sheet["A2"].value))
-        with self.assertRaisesRegex(ValueError, "duplicate date"):
-            read_workbook(self.path)
-
-    def test_import_twice_keeps_identical_counts(self):
-        data = read_workbook(self.path)
-        import_fund(data, "159509")
-        import_fund(data, "159509")
-        self.assertEqual({storage.TABLE_PRICE_HISTORY: 3, storage.TABLE_NAV_HISTORY: 2,
-                          storage.TABLE_PREMIUM_HISTORY: 3}, verify_workbook(data))
-
-    def test_restart_after_partial_import(self):
+    def test_interrupted_import_can_be_rerun_without_duplicates(self):
         data = read_workbook(self.path)
         with patch("shared.excel_import.upsert_premium_history", side_effect=RuntimeError("interrupted")):
             with self.assertRaisesRegex(RuntimeError, "interrupted"):
                 import_fund(data, "159509")
         self.assertEqual(0, len(self.tables[storage.TABLE_PREMIUM_HISTORY].rows))
         import_fund(data, "159509")
-        self.assertEqual(3, verify_workbook(data)[storage.TABLE_PREMIUM_HISTORY])
+        import_fund(data, "159509")
+        self.assertEqual({storage.TABLE_PRICE_HISTORY: 3, storage.TABLE_NAV_HISTORY: 2,
+                          storage.TABLE_PREMIUM_HISTORY: 3}, verify_workbook(data))
 
     def test_extra_or_corrupt_records_rejected(self):
         data = read_workbook(self.path)
